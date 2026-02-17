@@ -1,0 +1,260 @@
+@page "/creator"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+
+<PageTitle>Creator Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudText Typo="Typo.h4" Class="mb-6">Creator Dashboard</MudText>
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        @* Quick Stats *@
+        <MudGrid Class="mb-6">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Large" Color="Color.Primary" />
+                    <MudText Typo="Typo.h4" Class="my-2">@channels.Count</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">My Channels</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h4" Class="my-2">@courses.Count</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">My Courses</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Large" Color="Color.Tertiary" />
+                    <MudText Typo="Typo.h4" Class="my-2">@courses.Sum(c => c.ContentCount)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Total Content</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Large" Color="Color.Info" />
+                    <MudText Typo="Typo.h4" Class="my-2">@(stats?.TotalViews ?? 0)</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Total Views</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* Quick Actions *@
+        @if (channels.Any())
+        {
+            <MudText Typo="Typo.h5" Class="mb-4">Quick Actions</MudText>
+            <MudGrid Class="mb-6">
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Class="cursor-pointer" @onclick='() => Navigation.NavigateTo("/creator/channels")'>
+                        <MudCardContent Class="text-center pa-4">
+                            <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Large" Color="Color.Primary" />
+                            <MudText Typo="Typo.subtitle1" Class="mt-2">My Channels</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Manage your channels</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Class="cursor-pointer" @onclick='() => Navigation.NavigateTo($"/creator/channels/{channels.First().Id}/plans")'>
+                        <MudCardContent Class="text-center pa-4">
+                            <MudIcon Icon="@Icons.Material.Filled.CreditCard" Size="Size.Large" Color="Color.Secondary" />
+                            <MudText Typo="Typo.subtitle1" Class="mt-2">Subscription Plans</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Configure pricing</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Class="cursor-pointer" @onclick='() => Navigation.NavigateTo($"/creator/channels/{channels.First().Id}/subscribers")'>
+                        <MudCardContent Class="text-center pa-4">
+                            <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Large" Color="Color.Tertiary" />
+                            <MudText Typo="Typo.subtitle1" Class="mt-2">Subscribers</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">View your audience</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Class="cursor-pointer" @onclick='() => Navigation.NavigateTo($"/creator/channels/{channels.First().Id}/forms")'>
+                        <MudCardContent Class="text-center pa-4">
+                            <MudIcon Icon="@Icons.Material.Filled.Quiz" Size="Size.Large" Color="Color.Info" />
+                            <MudText Typo="Typo.subtitle1" Class="mt-2">Forms & Surveys</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Create quizzes</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudCard Class="cursor-pointer" @onclick='() => Navigation.NavigateTo("/creator/courses/new")'>
+                        <MudCardContent Class="text-center pa-4">
+                            <MudIcon Icon="@Icons.Material.Filled.Add" Size="Size.Large" Color="Color.Success" />
+                            <MudText Typo="Typo.subtitle1" Class="mt-2">New Course</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Create content</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            </MudGrid>
+        }
+
+        @* My Channels *@
+        <div class="d-flex justify-space-between align-center mb-4">
+            <MudText Typo="Typo.h5">My Channels</MudText>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/creator/channels">
+                View All
+            </MudButton>
+        </div>
+
+        @if (!channels.Any())
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-6">
+                You don't have any channels yet. Contact an administrator to be assigned as a channel admin.
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid Class="mb-6">
+                @foreach (var channel in channels)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard>
+                            <MudCardContent>
+                                <MudText Typo="Typo.h6">@channel.Name</MudText>
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                                    @channel.Description
+                                </MudText>
+                                <MudChip T="string" Size="Size.Small" Color="@(channel.IsActive ? Color.Success : Color.Default)">
+                                    @(channel.IsActive ? "Active" : "Inactive")
+                                </MudChip>
+                                <MudText Typo="Typo.caption" Class="d-block mt-2">
+                                    @channel.CourseCount courses
+                                </MudText>
+                            </MudCardContent>
+                            <MudCardActions Class="justify-space-between flex-wrap gap-2 pa-2">
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Primary"
+                                           Size="Size.Small"
+                                           Href="@($"/creator/courses?channelId={channel.Id}")"
+                                           StartIcon="@Icons.Material.Filled.School">
+                                    Courses
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Info"
+                                           Size="Size.Small"
+                                           Href="@($"/creator/channels/{channel.Id}/forms")"
+                                           StartIcon="@Icons.Material.Filled.Quiz">
+                                    Forms
+                                </MudButton>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Secondary"
+                                           Size="Size.Small"
+                                           Href="@($"/creator/channels/{channel.Id}/plans")"
+                                           StartIcon="@Icons.Material.Filled.CreditCard">
+                                    Plans
+                                </MudButton>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Tertiary"
+                                           Size="Size.Small"
+                                           Href="@($"/creator/channels/{channel.Id}/subscribers")"
+                                           StartIcon="@Icons.Material.Filled.People">
+                                    Subscribers
+                                </MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @* Recent Courses *@
+        <div class="d-flex justify-space-between align-center mb-4">
+            <MudText Typo="Typo.h5">Recent Courses</MudText>
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Href="/creator/courses/new"
+                       Disabled="@(!channels.Any())">
+                New Course
+            </MudButton>
+        </div>
+
+        @if (!courses.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No courses yet. Create your first course to get started!
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@courses.Take(5)" Hover="true" Elevation="2">
+                <HeaderContent>
+                    <MudTh>Title</MudTh>
+                    <MudTh>Channel</MudTh>
+                    <MudTh>Chapters</MudTh>
+                    <MudTh>Content</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Title">@context.Title</MudTd>
+                    <MudTd DataLabel="Channel">@context.ChannelName</MudTd>
+                    <MudTd DataLabel="Chapters">@context.ChapterCount</MudTd>
+                    <MudTd DataLabel="Content">@context.ContentCount</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsPublished ? Color.Success : Color.Warning)">
+                            @(context.IsPublished ? "Published" : "Draft")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Href="@($"/creator/courses/{context.Id}")" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Folder"
+                                       Size="Size.Small"
+                                       Href="@($"/creator/courses/{context.Id}/chapters")" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+
+            @if (courses.Count > 5)
+            {
+                <div class="d-flex justify-center mt-4">
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/creator/courses">
+                        View All Courses
+                    </MudButton>
+                </div>
+            }
+        }
+    }
+</MudContainer>
+
+<style>
+    .cursor-pointer {
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .cursor-pointer:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+</style>
+
+@code {
+    private List<ChannelDto> channels = new();
+    private List<CourseDto> courses = new();
+    private CMSStatsDto? stats;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        channels = await Api.GetMyChannelsAsync();
+        courses = await Api.GetMyCoursesAsync();
+        stats = await Api.GetCMSStatsAsync();
+        loading = false;
+    }
+}

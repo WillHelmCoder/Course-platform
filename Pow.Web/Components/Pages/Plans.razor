@@ -1,0 +1,198 @@
+@page "/plans"
+@using MudBlazor
+@using Pow.Domain.DTOs
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Select Your Plan</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-2">Choose Your Plan</MudText>
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary" Class="mb-6">
+        Select the plan that best fits your needs. You can upgrade anytime.
+    </MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_plans.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">No plans available at the moment.</MudAlert>
+    }
+    else
+    {
+        <MudGrid Justify="Justify.Center" Spacing="4">
+            @foreach (var plan in _plans)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="@(plan.IsRecommended ? 8 : 2)"
+                             Class="@(plan.IsRecommended ? "recommended-plan" : "")"
+                             Style="height: 100%;">
+                        @if (plan.IsRecommended)
+                        {
+                            <MudChip T="string" Color="Color.Primary" Size="Size.Small"
+                                     Style="position: absolute; top: -10px; right: 16px;">
+                                Recommended
+                            </MudChip>
+                        }
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h5" Align="Align.Center">@plan.Name</MudText>
+                                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+                                    @plan.Description
+                                </MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <div class="text-center mb-4">
+                                @if (plan.Price == 0)
+                                {
+                                    <MudText Typo="Typo.h3" Color="Color.Primary">Free</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.h3" Color="Color.Primary">
+                                        @plan.Currency @plan.Price.ToString("N2")
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        /@plan.Interval
+                                    </MudText>
+                                }
+                            </div>
+
+                            <MudDivider Class="mb-4" />
+
+                            <MudList T="string" Dense="true">
+                                @foreach (var feature in plan.Features)
+                                {
+                                    <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                                        @feature
+                                    </MudListItem>
+                                }
+                                @if (plan.MaxUsers > 0)
+                                {
+                                    <MudListItem T="string" Icon="@Icons.Material.Filled.People">
+                                        Up to @plan.MaxUsers users
+                                    </MudListItem>
+                                }
+                                else
+                                {
+                                    <MudListItem T="string" Icon="@Icons.Material.Filled.AllInclusive">
+                                        Unlimited users
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        </MudCardContent>
+                        <MudCardActions Class="justify-center pb-4">
+                            <MudButton Variant="@(plan.IsRecommended ? Variant.Filled : Variant.Outlined)"
+                                       Color="Color.Primary"
+                                       Size="Size.Large"
+                                       Disabled="_selecting"
+                                       OnClick="() => SelectPlan(plan.Id)">
+                                @if (_selectingPlanId == plan.Id)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                }
+                                Select Plan
+                            </MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+<style>
+    .recommended-plan {
+        border: 2px solid var(--mud-palette-primary);
+        position: relative;
+    }
+</style>
+
+@code {
+    private List<PlanDto> _plans = new();
+    private bool _loading = true;
+    private bool _selecting;
+    private Guid? _selectingPlanId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var hasPlan = await Api.HasPlanAsync();
+            if (hasPlan)
+            {
+                Nav.NavigateTo("/dashboard");
+                return;
+            }
+
+            _plans = await Api.GetPlansAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading plans: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SelectPlan(Guid planId)
+    {
+        _selecting = true;
+        _selectingPlanId = planId;
+        StateHasChanged();
+
+        try
+        {
+            var plan = _plans.FirstOrDefault(p => p.Id == planId);
+
+            // If plan has a price > 0, redirect to Stripe checkout
+            if (plan != null && plan.Price > 0)
+            {
+                var baseUrl = Nav.BaseUri.TrimEnd('/');
+                var successUrl = $"{baseUrl}/subscription/success";
+                var cancelUrl = $"{baseUrl}/plans";
+
+                var session = await Api.CreatePlatformCheckoutSessionAsync(planId, successUrl, cancelUrl);
+
+                if (session != null)
+                {
+                    Nav.NavigateTo(session.Url, forceLoad: true);
+                    return;
+                }
+                else
+                {
+                    Snackbar.Add("Failed to create checkout session", Severity.Error);
+                }
+            }
+            else
+            {
+                // Free plan - select directly
+                var success = await Api.SelectPlanAsync(planId);
+                if (success)
+                {
+                    Snackbar.Add("Plan selected successfully!", Severity.Success);
+                    Nav.NavigateTo("/dashboard");
+                }
+                else
+                {
+                    Snackbar.Add("Failed to select plan", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _selecting = false;
+            _selectingPlanId = null;
+        }
+    }
+}

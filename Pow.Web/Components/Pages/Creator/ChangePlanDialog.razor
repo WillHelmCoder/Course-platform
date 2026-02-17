@@ -1,0 +1,69 @@
+@using Pow.Domain.DTOs
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.SwapHoriz" Class="mr-2" />
+            Change Plan for @Subscriber?.Email
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Current plan: <strong>@Subscriber?.PlanName</strong>
+        </MudText>
+
+        <MudSelect T="Guid?"
+                   @bind-Value="selectedPlanId"
+                   Label="New Plan"
+                   Variant="Variant.Outlined"
+                   Required="true"
+                   RequiredError="Please select a plan">
+            @foreach (var plan in Plans.Where(p => p.Id != Subscriber?.PlanId))
+            {
+                <MudSelectItem T="Guid?" Value="@((Guid?)plan.Id)">
+                    @plan.Name
+                    @if (plan.Price > 0)
+                    {
+                        <text> - @plan.Currency @plan.Price.ToString("N2")/@plan.Interval</text>
+                    }
+                    else
+                    {
+                        <text> - Free</text>
+                    }
+                </MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="Submit"
+                   Disabled="!selectedPlanId.HasValue">
+            Change Plan
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance? MudDialog { get; set; }
+
+    [Parameter]
+    public ChannelSubscriberDto? Subscriber { get; set; }
+
+    [Parameter]
+    public List<ChannelPlanDto> Plans { get; set; } = new();
+
+    private Guid? selectedPlanId;
+
+    private void Cancel() => MudDialog?.Cancel();
+
+    private void Submit()
+    {
+        if (selectedPlanId.HasValue)
+        {
+            MudDialog?.Close(DialogResult.Ok(selectedPlanId.Value));
+        }
+    }
+}

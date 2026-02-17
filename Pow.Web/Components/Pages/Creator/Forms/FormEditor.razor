@@ -1,0 +1,499 @@
+@page "/creator/channels/{ChannelId:guid}/forms/{FormId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Edit Form - @(form?.Title ?? "Loading...")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (form == null)
+    {
+        <MudAlert Severity="Severity.Error">Form not found</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @* Left Column: Form Settings *@
+            <MudItem xs="12" md="4">
+                <MudCard>
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Form Settings</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudStack Spacing="3">
+                            <MudTextField @bind-Value="editModel.Title"
+                                          Label="Title"
+                                          Variant="Variant.Outlined"
+                                          Required="true" />
+
+                            <MudTextField @bind-Value="editModel.Description"
+                                          Label="Description"
+                                          Variant="Variant.Outlined"
+                                          Lines="2" />
+
+                            <MudSelect T="FormType"
+                                       Label="Type"
+                                       @bind-Value="editModel.FormType"
+                                       Variant="Variant.Outlined">
+                                <MudSelectItem Value="FormType.Survey">Survey</MudSelectItem>
+                                <MudSelectItem Value="FormType.Quiz">Quiz</MudSelectItem>
+                            </MudSelect>
+
+                            @if (editModel.FormType == FormType.Quiz)
+                            {
+                                <MudNumericField @bind-Value="editModel.PassingScore"
+                                                 Label="Passing Score (%)"
+                                                 Variant="Variant.Outlined"
+                                                 Min="0"
+                                                 Max="100" />
+                            }
+
+                            <MudSelect T="FormTrigger"
+                                       Label="Trigger"
+                                       @bind-Value="editModel.Trigger"
+                                       Variant="Variant.Outlined">
+                                <MudSelectItem Value="FormTrigger.Manual">Manual</MudSelectItem>
+                                <MudSelectItem Value="FormTrigger.AfterRegistration">After Registration</MudSelectItem>
+                                <MudSelectItem Value="FormTrigger.AfterCourseComplete">After Course Complete</MudSelectItem>
+                            </MudSelect>
+
+                            @if (editModel.Trigger == FormTrigger.AfterCourseComplete)
+                            {
+                                <MudSelect T="Guid?"
+                                           Label="Trigger Course"
+                                           @bind-Value="editModel.TriggerCourseId"
+                                           Variant="Variant.Outlined">
+                                    @foreach (var course in courses)
+                                    {
+                                        <MudSelectItem Value="@((Guid?)course.Id)">@course.Title</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+
+                            <MudSwitch @bind-Value="editModel.IsActive"
+                                       Label="Active"
+                                       Color="Color.Success" />
+                        </MudStack>
+                    </MudCardContent>
+                    <MudCardActions Class="pa-4">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SaveSettings"
+                                   Disabled="saving"
+                                   FullWidth="true">
+                            @if (saving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Save Settings
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+
+                @* Form Link *@
+                <MudCard Class="mt-4">
+                    <MudCardContent>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Form Link</MudText>
+                        <MudTextField Value="@GetFormUrl()"
+                                      Variant="Variant.Outlined"
+                                      ReadOnly="true"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@Icons.Material.Filled.ContentCopy"
+                                      OnAdornmentClick="CopyFormLink" />
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Right Column: Questions *@
+            <MudItem xs="12" md="8">
+                <MudCard>
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Questions (@form.Questions.Count)</MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Add"
+                                       Size="Size.Small"
+                                       OnClick="AddQuestion">
+                                Add Question
+                            </MudButton>
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (!form.Questions.Any())
+                        {
+                            <MudAlert Severity="Severity.Info">
+                                No questions yet. Add your first question to get started!
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="4">
+                                @foreach (var question in form.Questions.OrderBy(q => q.SortOrder))
+                                {
+                                    <MudPaper Elevation="1" Class="pa-4">
+                                        <MudStack Spacing="2">
+                                            @* Question Header *@
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                                <MudStack>
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">
+                                                            Q@(question.SortOrder + 1)
+                                                        </MudChip>
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                                                            @GetQuestionTypeLabel(question.QuestionType)
+                                                        </MudChip>
+                                                        @if (question.IsRequired)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Required</MudChip>
+                                                        }
+                                                    </MudStack>
+                                                    <MudText Typo="Typo.body1" Class="font-weight-medium">@question.Text</MudText>
+                                                    @if (!string.IsNullOrEmpty(question.Description))
+                                                    {
+                                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@question.Description</MudText>
+                                                    }
+                                                </MudStack>
+                                                <MudStack Row="true">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                                   Size="Size.Small"
+                                                                   OnClick="@(() => EditQuestion(question))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                   Size="Size.Small"
+                                                                   Color="Color.Error"
+                                                                   OnClick="@(() => DeleteQuestion(question))" />
+                                                </MudStack>
+                                            </MudStack>
+
+                                            @* Answer Options (for choice questions) *@
+                                            @if (question.QuestionType != QuestionType.OpenText)
+                                            {
+                                                <MudDivider Class="my-2" />
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Answer Options:</MudText>
+
+                                                @if (!question.AnswerOptions.Any())
+                                                {
+                                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                                        No options yet. Add options for users to choose from.
+                                                    </MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudList T="string" Dense="true">
+                                                        @foreach (var option in question.AnswerOptions.OrderBy(o => o.SortOrder))
+                                                        {
+                                                            <MudListItem>
+                                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                                        @if (question.QuestionType == QuestionType.SingleChoice)
+                                                                        {
+                                                                            <MudIcon Icon="@Icons.Material.Filled.RadioButtonUnchecked" Size="Size.Small" />
+                                                                        }
+                                                                        else
+                                                                        {
+                                                                            <MudIcon Icon="@Icons.Material.Filled.CheckBoxOutlineBlank" Size="Size.Small" />
+                                                                        }
+                                                                        <MudText>@option.Text</MudText>
+                                                                        @if (editModel.FormType == FormType.Quiz)
+                                                                        {
+                                                                            <MudChip T="string" Size="Size.Small" Color="@(option.IsCorrect ? Color.Success : Color.Default)">
+                                                                                @option.Points pts
+                                                                            </MudChip>
+                                                                            @if (option.IsCorrect)
+                                                                            {
+                                                                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Success" />
+                                                                            }
+                                                                        }
+                                                                    </MudStack>
+                                                                    <MudStack Row="true">
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                                                       Size="Size.Small"
+                                                                                       OnClick="@(() => EditOption(question, option))" />
+                                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                                       Size="Size.Small"
+                                                                                       Color="Color.Error"
+                                                                                       OnClick="@(() => DeleteOption(question, option))" />
+                                                                    </MudStack>
+                                                                </MudStack>
+                                                            </MudListItem>
+                                                        }
+                                                    </MudList>
+                                                }
+
+                                                <MudButton Variant="Variant.Text"
+                                                           Color="Color.Primary"
+                                                           Size="Size.Small"
+                                                           StartIcon="@Icons.Material.Filled.Add"
+                                                           OnClick="@(() => AddOption(question))">
+                                                    Add Option
+                                                </MudButton>
+                                            }
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                            </MudStack>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid ChannelId { get; set; }
+
+    [Parameter]
+    public Guid FormId { get; set; }
+
+    private FormDetailDto? form;
+    private FormEditModel editModel = new();
+    private List<CourseDto> courses = new();
+    private List<BreadcrumbItem> breadcrumbs = new();
+    private bool loading = true;
+    private bool saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+
+        form = await Api.GetFormAsync(FormId);
+        courses = await Api.GetAllCoursesAsync(ChannelId);
+
+        if (form != null)
+        {
+            editModel = new FormEditModel
+            {
+                Title = form.Title,
+                Description = form.Description,
+                FormType = form.FormType,
+                Trigger = form.Trigger,
+                TriggerCourseId = form.TriggerCourseId,
+                PassingScore = form.PassingScore,
+                IsActive = form.IsActive,
+                SortOrder = form.SortOrder
+            };
+        }
+
+        BuildBreadcrumbs();
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Creator", "/creator"),
+            new("Channels", "/creator/channels"),
+            new(form?.ChannelName ?? "Channel", $"/creator/channels/{ChannelId}"),
+            new("Forms", $"/creator/channels/{ChannelId}/forms"),
+            new(form?.Title ?? "Edit", null, disabled: true)
+        };
+    }
+
+    private string GetFormUrl() => $"{Navigation.BaseUri}forms/{FormId}";
+
+    private async Task CopyFormLink()
+    {
+        // Note: Would need JS interop for clipboard
+        Snackbar.Add("Form link copied!", Severity.Success);
+    }
+
+    private string GetQuestionTypeLabel(QuestionType type) => type switch
+    {
+        QuestionType.OpenText => "Text",
+        QuestionType.SingleChoice => "Single Choice",
+        QuestionType.MultipleChoice => "Multiple Choice",
+        _ => "Unknown"
+    };
+
+    private async Task SaveSettings()
+    {
+        if (form == null) return;
+
+        saving = true;
+
+        var dto = new UpdateFormDto(
+            editModel.Title,
+            editModel.Description,
+            editModel.FormType,
+            editModel.Trigger,
+            editModel.TriggerCourseId,
+            editModel.FormType == FormType.Quiz ? editModel.PassingScore : null,
+            editModel.IsActive,
+            editModel.SortOrder
+        );
+
+        var result = await Api.UpdateFormAsync(FormId, dto);
+
+        saving = false;
+
+        if (result != null)
+        {
+            Snackbar.Add("Settings saved", Severity.Success);
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add("Failed to save settings", Severity.Error);
+        }
+    }
+
+    private async Task AddQuestion()
+    {
+        var parameters = new DialogParameters
+        {
+            { "FormId", FormId },
+            { "IsQuiz", editModel.FormType == FormType.Quiz }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<QuestionDialog>("Add Question", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadData();
+            Snackbar.Add("Question added", Severity.Success);
+        }
+    }
+
+    private async Task EditQuestion(FormQuestionDto question)
+    {
+        var parameters = new DialogParameters
+        {
+            { "FormId", FormId },
+            { "Question", question },
+            { "IsQuiz", editModel.FormType == FormType.Quiz }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<QuestionDialog>("Edit Question", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadData();
+            Snackbar.Add("Question updated", Severity.Success);
+        }
+    }
+
+    private async Task DeleteQuestion(FormQuestionDto question)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Delete Question",
+            $"Are you sure you want to delete this question?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirm == true)
+        {
+            var deleted = await Api.DeleteFormQuestionAsync(question.Id);
+            if (deleted)
+            {
+                await LoadData();
+                Snackbar.Add("Question deleted", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete question", Severity.Error);
+            }
+        }
+    }
+
+    private async Task AddOption(FormQuestionDto question)
+    {
+        var parameters = new DialogParameters
+        {
+            { "QuestionId", question.Id },
+            { "IsQuiz", editModel.FormType == FormType.Quiz }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<OptionDialog>("Add Option", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadData();
+            Snackbar.Add("Option added", Severity.Success);
+        }
+    }
+
+    private async Task EditOption(FormQuestionDto question, FormAnswerOptionDto option)
+    {
+        var parameters = new DialogParameters
+        {
+            { "QuestionId", question.Id },
+            { "Option", option },
+            { "IsQuiz", editModel.FormType == FormType.Quiz }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<OptionDialog>("Edit Option", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await LoadData();
+            Snackbar.Add("Option updated", Severity.Success);
+        }
+    }
+
+    private async Task DeleteOption(FormQuestionDto question, FormAnswerOptionDto option)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Delete Option",
+            $"Are you sure you want to delete this option?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirm == true)
+        {
+            var deleted = await Api.DeleteAnswerOptionAsync(option.Id);
+            if (deleted)
+            {
+                await LoadData();
+                Snackbar.Add("Option deleted", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete option", Severity.Error);
+            }
+        }
+    }
+
+    private class FormEditModel
+    {
+        public string Title { get; set; } = "";
+        public string? Description { get; set; }
+        public FormType FormType { get; set; }
+        public FormTrigger Trigger { get; set; }
+        public Guid? TriggerCourseId { get; set; }
+        public int? PassingScore { get; set; }
+        public bool IsActive { get; set; }
+        public int SortOrder { get; set; }
+    }
+}

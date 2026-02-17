@@ -1,0 +1,404 @@
+@page "/admin/channels"
+@page "/admin/channels/new"
+@page "/admin/channels/{ChannelId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@using Pow.Web.Components.Shared
+@attribute [Authorize(Roles = "SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>@(IsNew ? "New Channel" : IsEditing ? "Edit Channel" : "CMS Channels")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    @if (IsNew || IsEditing)
+    {
+        @* Channel Form *@
+        <MudText Typo="Typo.h4" Class="mb-6">@(IsNew ? "New Channel" : "Edit Channel")</MudText>
+
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudCard>
+                    <MudCardContent>
+                        <MudGrid>
+                            <MudItem xs="12" md="8">
+                                <MudTextField @bind-Value="editModel.Name"
+                                              Label="Name"
+                                              Variant="Variant.Outlined"
+                                              Required="true" />
+                            </MudItem>
+                            <MudItem xs="12" md="4">
+                                <MudNumericField @bind-Value="editModel.SortOrder"
+                                                 Label="Sort Order"
+                                                 Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="editModel.Description"
+                                              Label="Description"
+                                              Variant="Variant.Outlined"
+                                              Lines="3" />
+                            </MudItem>
+                            @if (!IsNew)
+                            {
+                                <MudItem xs="12">
+                                    <MudSwitch @bind-Value="editModel.IsActive" Label="Active" Color="Color.Primary" />
+                                </MudItem>
+                            }
+                        </MudGrid>
+                    </MudCardContent>
+                    <MudCardActions Class="pa-4">
+                        <MudButton Variant="Variant.Text" OnClick="Cancel">Cancel</MudButton>
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="Save"
+                                   Disabled="saving">
+                            @if (saving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            @(IsNew ? "Create" : "Save")
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+
+            @if (!IsNew && ChannelId.HasValue)
+            {
+                <MudItem xs="12" md="4">
+                    <MudCard>
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Channel Admins</MudText>
+                            </CardHeaderContent>
+                            <CardHeaderActions>
+                                <MudIconButton Icon="@Icons.Material.Filled.PersonAdd"
+                                               OnClick="OpenAddAdminDialog" />
+                            </CardHeaderActions>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            @if (!channelAdmins.Any())
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                    No admins assigned yet.
+                                </MudText>
+                            }
+                            else
+                            {
+                                <MudList T="ChannelAdminDto" Dense="true">
+                                    @foreach (var admin in channelAdmins)
+                                    {
+                                        <MudListItem T="ChannelAdminDto">
+                                            <div class="d-flex justify-space-between align-center">
+                                                <MudText>@admin.UserEmail</MudText>
+                                                <MudIconButton Icon="@Icons.Material.Filled.RemoveCircle"
+                                                               Size="Size.Small"
+                                                               Color="Color.Error"
+                                                               OnClick="@(() => RemoveAdmin(admin))" />
+                                            </div>
+                                        </MudListItem>
+                                    }
+                                </MudList>
+                            }
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else
+    {
+        @* Channel List *@
+        <div class="d-flex justify-space-between align-center mb-6">
+            <MudText Typo="Typo.h4">CMS Channels</MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Href="/admin/channels/new">
+                New Channel
+            </MudButton>
+        </div>
+
+        @if (loading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (!channels.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No channels yet. Create your first channel to get started!
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@channels" Hover="true" Elevation="2">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ChannelDto, object>(x => x.Name)">Name</MudTableSortLabel></MudTh>
+                    <MudTh>Slug</MudTh>
+                    <MudTh>Courses</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Order</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">
+                        <MudLink Href="@($"/admin/channels/{context.Id}")">@context.Name</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Slug">@context.Slug</MudTd>
+                    <MudTd DataLabel="Courses">@context.CourseCount</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsActive ? Color.Success : Color.Default)">
+                            @(context.IsActive ? "Active" : "Inactive")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Order">@context.SortOrder</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Href="@($"/admin/channels/{context.Id}")" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="@(() => ConfirmDelete(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+
+        @* Stats Card *@
+        @if (stats != null)
+        {
+            <MudCard Class="mt-6">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">CMS Statistics</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="6" sm="4" md="2">
+                            <MudText Typo="Typo.h4">@stats.TotalChannels</MudText>
+                            <MudText Typo="Typo.caption">Channels</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="4" md="2">
+                            <MudText Typo="Typo.h4">@stats.TotalCourses</MudText>
+                            <MudText Typo="Typo.caption">Courses</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="4" md="2">
+                            <MudText Typo="Typo.h4">@stats.TotalChapters</MudText>
+                            <MudText Typo="Typo.caption">Chapters</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="4" md="2">
+                            <MudText Typo="Typo.h4">@stats.TotalContent</MudText>
+                            <MudText Typo="Typo.caption">Content</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="4" md="2">
+                            <MudText Typo="Typo.h4">@stats.PublishedContent</MudText>
+                            <MudText Typo="Typo.caption">Published</MudText>
+                        </MudItem>
+                        <MudItem xs="6" sm="4" md="2">
+                            <MudText Typo="Typo.h4">@stats.TotalViews</MudText>
+                            <MudText Typo="Typo.caption">Total Views</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        }
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid? ChannelId { get; set; }
+
+    private List<ChannelDto> channels = new();
+    private List<ChannelAdminDto> channelAdmins = new();
+    private CMSStatsDto? stats;
+    private bool loading = true;
+    private bool saving;
+
+    private bool IsNew => Navigation.Uri.EndsWith("/new", StringComparison.OrdinalIgnoreCase);
+    private bool IsEditing => ChannelId.HasValue && !IsNew;
+
+    private ChannelEditModel editModel = new();
+
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+
+        if (IsEditing && ChannelId.HasValue)
+        {
+            var channel = await Api.GetChannelAsync(ChannelId.Value);
+            if (channel != null)
+            {
+                editModel = new ChannelEditModel
+                {
+                    Name = channel.Name,
+                    Description = channel.Description,
+                    IsActive = channel.IsActive,
+                    SortOrder = channel.SortOrder
+                };
+            }
+            channelAdmins = await Api.GetChannelAdminsAsync(ChannelId.Value);
+        }
+        else if (IsNew)
+        {
+            editModel = new ChannelEditModel();
+        }
+        else
+        {
+            channels = await Api.GetAllChannelsAsync();
+            stats = await Api.GetCMSStatsAsync();
+        }
+
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Admin", "/admin"),
+            new("CMS Channels", "/admin/channels")
+        };
+
+        if (IsNew)
+        {
+            breadcrumbs.Add(new("New", null, disabled: true));
+        }
+        else if (IsEditing)
+        {
+            breadcrumbs.Add(new("Edit", null, disabled: true));
+        }
+    }
+
+    private async Task Save()
+    {
+        saving = true;
+
+        if (IsNew)
+        {
+            var dto = new CreateChannelDto(editModel.Name, editModel.Description);
+            var created = await Api.CreateChannelAsync(dto);
+            if (created != null)
+            {
+                Snackbar.Add("Channel created successfully", Severity.Success);
+                Navigation.NavigateTo($"/admin/channels/{created.Id}");
+            }
+            else
+            {
+                Snackbar.Add("Failed to create channel", Severity.Error);
+            }
+        }
+        else if (ChannelId.HasValue)
+        {
+            var dto = new UpdateChannelDto(editModel.Name, editModel.Description, editModel.IsActive, editModel.SortOrder);
+            var updated = await Api.UpdateChannelAsync(ChannelId.Value, dto);
+            if (updated != null)
+            {
+                Snackbar.Add("Channel updated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to update channel", Severity.Error);
+            }
+        }
+
+        saving = false;
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/admin/channels");
+    }
+
+    private async Task ConfirmDelete(ChannelDto channel)
+    {
+        var deleted = await Api.DeleteChannelAsync(channel.Id);
+        if (deleted)
+        {
+            channels.Remove(channel);
+            Snackbar.Add("Channel deleted", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete channel", Severity.Error);
+        }
+    }
+
+    private async Task OpenAddAdminDialog()
+    {
+        // Simple input dialog for user ID
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var parameters = new DialogParameters
+        {
+            { "Title", "Add Channel Admin" },
+            { "Label", "User ID (GUID)" },
+            { "Placeholder", "Enter user ID" }
+        };
+
+        var dialog = await DialogService.ShowAsync<InputDialog>("Add Admin", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is string userId && Guid.TryParse(userId, out var userGuid))
+        {
+            if (ChannelId.HasValue)
+            {
+                var assigned = await Api.AssignChannelAdminAsync(ChannelId.Value, userGuid);
+                if (assigned)
+                {
+                    channelAdmins = await Api.GetChannelAdminsAsync(ChannelId.Value);
+                    Snackbar.Add("Admin assigned successfully", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("Failed to assign admin", Severity.Error);
+                }
+            }
+        }
+    }
+
+    private async Task RemoveAdmin(ChannelAdminDto admin)
+    {
+        if (ChannelId.HasValue)
+        {
+            var removed = await Api.RemoveChannelAdminAsync(ChannelId.Value, admin.UserId);
+            if (removed)
+            {
+                channelAdmins.Remove(admin);
+                Snackbar.Add("Admin removed", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to remove admin", Severity.Error);
+            }
+        }
+    }
+
+    private class ChannelEditModel
+    {
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public bool IsActive { get; set; } = true;
+        public int SortOrder { get; set; }
+    }
+}

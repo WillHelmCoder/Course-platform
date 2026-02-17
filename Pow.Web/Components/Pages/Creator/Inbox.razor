@@ -1,0 +1,265 @@
+@page "/creator/inbox"
+@page "/creator/inbox/{ChannelId:guid}"
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Channel Inbox</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+        <MudText Typo="Typo.h4">Channel Inbox</MudText>
+        @if (_selectedChannelId.HasValue && _messages.Any(m => !m.IsRead))
+        {
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Primary"
+                       OnClick="MarkAllAsRead">
+                Mark All as Read
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (!_channels.Any())
+    {
+        <MudAlert Severity="Severity.Info">You don't have any channels yet.</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudPaper Class="pa-2">
+                    <MudText Typo="Typo.subtitle2" Class="pa-2">Channels</MudText>
+                    <MudList T="Guid?" Dense="true" @bind-SelectedValue="_selectedChannelId">
+                        @foreach (var channel in _channels)
+                        {
+                            <MudListItem Value="@channel.Id" OnClick="() => SelectChannel(channel.Id)">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudText>@channel.Name</MudText>
+                                    @if (_unreadCounts.TryGetValue(channel.Id, out var count) && count > 0)
+                                    {
+                                        <MudBadge Content="@count" Color="Color.Primary" />
+                                    }
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="9">
+                @if (!_selectedChannelId.HasValue)
+                {
+                    <MudPaper Class="pa-4">
+                        <MudText Color="Color.Secondary">Select a channel to view messages</MudText>
+                    </MudPaper>
+                }
+                else if (_loadingMessages)
+                {
+                    <MudProgressCircular Indeterminate="true" />
+                }
+                else if (!_messages.Any())
+                {
+                    <MudPaper Class="pa-4">
+                        <MudText Color="Color.Secondary">No messages in this channel</MudText>
+                    </MudPaper>
+                }
+                else
+                {
+                    @if (_selectedMessage == null)
+                    {
+                        <MudPaper Class="pa-0">
+                            <MudList T="Guid?" Dense="true">
+                                @foreach (var message in _messages)
+                                {
+                                    <MudListItem OnClick="() => SelectMessage(message)">
+                                        <MudStack Row="true" AlignItems="AlignItems.Start" Style="width: 100%;">
+                                            @if (!message.IsRead)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Circle"
+                                                         Color="Color.Primary"
+                                                         Size="Size.Small"
+                                                         Class="mt-1" />
+                                            }
+                                            else
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Outlined.Circle"
+                                                         Color="Color.Default"
+                                                         Size="Size.Small"
+                                                         Class="mt-1" />
+                                            }
+                                            <MudStack Spacing="0" Style="flex: 1;">
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                                    <MudText Typo="Typo.subtitle2"
+                                                             Style="@(!message.IsRead ? "font-weight: 600;" : "")">
+                                                        @message.SenderName
+                                                    </MudText>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @message.CreatedAt.ToLocalTime().ToString("MMM d, h:mm tt")
+                                                    </MudText>
+                                                </MudStack>
+                                                <MudText Typo="Typo.body2"
+                                                         Style="@(!message.IsRead ? "font-weight: 500;" : "")">
+                                                    @message.Subject
+                                                </MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    @(message.Message.Length > 80 ? message.Message.Substring(0, 80) + "..." : message.Message)
+                                                </MudText>
+                                            </MudStack>
+                                        </MudStack>
+                                    </MudListItem>
+                                    <MudDivider />
+                                }
+                            </MudList>
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudPaper Class="pa-4">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+                                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                                               OnClick="() => _selectedMessage = null" />
+                                <MudText Typo="Typo.h6">@_selectedMessage.Subject</MudText>
+                                <MudSpacer />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Color="Color.Error"
+                                               OnClick="DeleteSelectedMessage" />
+                            </MudStack>
+
+                            <MudDivider Class="mb-4" />
+
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                                <MudAvatar Size="Size.Medium" Color="Color.Primary">
+                                    @_selectedMessage.SenderName[0].ToString().ToUpper()
+                                </MudAvatar>
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.subtitle2">@_selectedMessage.SenderName</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @_selectedMessage.SenderEmail
+                                    </MudText>
+                                </MudStack>
+                                <MudSpacer />
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @_selectedMessage.CreatedAt.ToLocalTime().ToString("MMMM d, yyyy h:mm tt")
+                                </MudText>
+                            </MudStack>
+
+                            <MudDivider Class="my-4" />
+
+                            <MudText Style="white-space: pre-wrap;">@_selectedMessage.Message</MudText>
+
+                            <MudDivider Class="my-4" />
+
+                            <MudButton Variant="Variant.Outlined"
+                                       StartIcon="@Icons.Material.Filled.Email"
+                                       Href="@($"mailto:{_selectedMessage.SenderEmail}?subject=Re: {_selectedMessage.Subject}")">
+                                Reply via Email
+                            </MudButton>
+                        </MudPaper>
+                    }
+                }
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public Guid? ChannelId { get; set; }
+
+    private bool _loading = true;
+    private bool _loadingMessages;
+    private List<ChannelDto> _channels = new();
+    private Dictionary<Guid, int> _unreadCounts = new();
+    private Guid? _selectedChannelId;
+    private List<ChannelMessageDto> _messages = new();
+    private ChannelMessageDto? _selectedMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _channels = await Api.GetMyChannelsAsync();
+
+        foreach (var channel in _channels)
+        {
+            var count = await Api.GetUnreadMessageCountAsync(channel.Id);
+            _unreadCounts[channel.Id] = count;
+        }
+
+        _loading = false;
+
+        if (ChannelId.HasValue && _channels.Any(c => c.Id == ChannelId.Value))
+        {
+            await SelectChannel(ChannelId.Value);
+        }
+        else if (_channels.Any())
+        {
+            await SelectChannel(_channels.First().Id);
+        }
+    }
+
+    private async Task SelectChannel(Guid channelId)
+    {
+        _selectedChannelId = channelId;
+        _selectedMessage = null;
+        _loadingMessages = true;
+
+        _messages = await Api.GetChannelMessagesAsync(channelId);
+
+        _loadingMessages = false;
+    }
+
+    private async Task SelectMessage(ChannelMessageDto message)
+    {
+        _selectedMessage = message;
+
+        if (!message.IsRead)
+        {
+            await Api.MarkMessageAsReadAsync(message.Id);
+
+            var index = _messages.IndexOf(message);
+            if (index >= 0)
+            {
+                _messages[index] = message with { IsRead = true, ReadAt = DateTime.UtcNow };
+                _selectedMessage = _messages[index];
+            }
+
+            if (_selectedChannelId.HasValue && _unreadCounts.ContainsKey(_selectedChannelId.Value))
+            {
+                _unreadCounts[_selectedChannelId.Value] = Math.Max(0, _unreadCounts[_selectedChannelId.Value] - 1);
+            }
+        }
+    }
+
+    private async Task MarkAllAsRead()
+    {
+        if (!_selectedChannelId.HasValue) return;
+
+        var success = await Api.MarkAllMessagesAsReadAsync(_selectedChannelId.Value);
+        if (success)
+        {
+            _messages = _messages.Select(m => m with { IsRead = true, ReadAt = DateTime.UtcNow }).ToList();
+            _unreadCounts[_selectedChannelId.Value] = 0;
+            Snackbar.Add("All messages marked as read", Severity.Success);
+        }
+    }
+
+    private async Task DeleteSelectedMessage()
+    {
+        if (_selectedMessage == null) return;
+
+        var success = await Api.DeleteMessageAsync(_selectedMessage.Id);
+        if (success)
+        {
+            _messages.Remove(_selectedMessage);
+            _selectedMessage = null;
+            Snackbar.Add("Message deleted", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete message", Severity.Error);
+        }
+    }
+}

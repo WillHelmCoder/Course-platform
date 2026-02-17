@@ -1,0 +1,341 @@
+@page "/creator/channels/{ChannelId:guid}/subscribers"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Subscribers - @(channel?.Name ?? "Channel")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    <div class="d-flex justify-space-between align-center mb-6">
+        <div>
+            <MudText Typo="Typo.h4">Subscribers</MudText>
+            @if (channel != null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@channel.Name</MudText>
+            }
+        </div>
+        <MudChip T="string" Color="Color.Primary" Size="Size.Large">
+            @subscribers.Count total
+        </MudChip>
+    </div>
+
+    @* Stats Cards *@
+    <MudGrid Class="mb-6">
+        @foreach (var plan in plans.OrderBy(p => p.SortOrder))
+        {
+            var count = subscribers.Count(s => s.PlanId == plan.Id && s.Status == SubscriptionStatus.Active);
+            <MudItem xs="6" sm="4" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudText Typo="Typo.h4" Color="Color.Primary">@count</MudText>
+                    <MudText Typo="Typo.body2">@plan.Name</MudText>
+                    @if (plan.Price > 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @plan.Currency @((plan.Price * count).ToString("N2"))/mo
+                        </MudText>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!subscribers.Any())
+    {
+        <MudAlert Severity="Severity.Info">
+            No subscribers yet. Share your channel to start growing your audience!
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="@filteredSubscribers" Hover="true" Elevation="2" Filter="FilterFunc">
+            <ToolBarContent>
+                <MudTextField @bind-Value="searchText"
+                              Placeholder="Search by email..."
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              IconSize="Size.Medium"
+                              Class="mt-0 mr-4"
+                              Immediate="true"
+                              Style="max-width: 300px;" />
+                <MudSelect T="Guid?"
+                           @bind-Value="filterPlanId"
+                           Label="Filter by Plan"
+                           Variant="Variant.Outlined"
+                           Dense="true"
+                           Style="max-width: 200px;"
+                           Class="mt-0 mr-4">
+                    <MudSelectItem T="Guid?" Value="@((Guid?)null)">All Plans</MudSelectItem>
+                    @foreach (var plan in plans)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)plan.Id)">@plan.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="SubscriptionStatus?"
+                           @bind-Value="filterStatus"
+                           Label="Status"
+                           Variant="Variant.Outlined"
+                           Dense="true"
+                           Style="max-width: 150px;"
+                           Class="mt-0">
+                    <MudSelectItem T="SubscriptionStatus?" Value="@((SubscriptionStatus?)null)">All</MudSelectItem>
+                    <MudSelectItem T="SubscriptionStatus?" Value="@((SubscriptionStatus?)SubscriptionStatus.Active)">Active</MudSelectItem>
+                    <MudSelectItem T="SubscriptionStatus?" Value="@((SubscriptionStatus?)SubscriptionStatus.Cancelled)">Cancelled</MudSelectItem>
+                    <MudSelectItem T="SubscriptionStatus?" Value="@((SubscriptionStatus?)SubscriptionStatus.Expired)">Expired</MudSelectItem>
+                </MudSelect>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh><MudTableSortLabel SortBy="new Func<ChannelSubscriberDto, object>(x => x.Email)">Email</MudTableSortLabel></MudTh>
+                <MudTh>Plan</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<ChannelSubscriberDto, object>(x => x.SubscribedAt)">Subscribed</MudTableSortLabel></MudTh>
+                <MudTh>Days Left</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Revenue</MudTh>
+                <MudTh Style="width: 150px;">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Email">@context.Email</MudTd>
+                <MudTd DataLabel="Plan">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.PlanName</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Subscribed">@context.SubscribedAt.ToString("MMM dd, yyyy")</MudTd>
+                <MudTd DataLabel="Days Left">
+                    @if (context.ExpiresAt.HasValue)
+                    {
+                        var daysLeft = (context.ExpiresAt.Value - DateTime.UtcNow).Days;
+                        @if (daysLeft > 30)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">@daysLeft days</MudChip>
+                        }
+                        else if (daysLeft > 7)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">@daysLeft days</MudChip>
+                        }
+                        else if (daysLeft > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error">@daysLeft days</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Dark">Expired</MudChip>
+                        }
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Lifetime</MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                        @context.Status
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Revenue">
+                    @if (context.PricePaid.HasValue && context.PricePaid > 0)
+                    {
+                        <text>@context.Currency @context.PricePaid.Value.ToString("N2")</text>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Free</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                        @if (context.Status == SubscriptionStatus.Active)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Add" OnClick="@(() => ExtendSubscription(context, 30))">
+                                Extend 30 days
+                            </MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Add" OnClick="@(() => ExtendSubscription(context, 90))">
+                                Extend 90 days
+                            </MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.SwapHoriz" OnClick="@(() => OpenChangePlanDialog(context))">
+                                Change Plan
+                            </MudMenuItem>
+                            <MudDivider />
+                            <MudMenuItem Icon="@Icons.Material.Filled.Cancel" IconColor="Color.Error" OnClick="@(() => CancelSubscription(context))">
+                                Cancel
+                            </MudMenuItem>
+                        }
+                        else
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" IconColor="Color.Success" OnClick="@(() => ReactivateSubscription(context, 30))">
+                                Reactivate (30 days)
+                            </MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" IconColor="Color.Success" OnClick="@(() => ReactivateSubscription(context, 90))">
+                                Reactivate (90 days)
+                            </MudMenuItem>
+                        }
+                    </MudMenu>
+                </MudTd>
+            </RowTemplate>
+            <PagerContent>
+                <MudTablePager />
+            </PagerContent>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid ChannelId { get; set; }
+
+    private ChannelDto? channel;
+    private List<ChannelPlanDto> plans = new();
+    private List<ChannelSubscriberDto> subscribers = new();
+    private bool loading = true;
+    private string searchText = "";
+    private Guid? filterPlanId;
+    private SubscriptionStatus? filterStatus;
+
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    private IEnumerable<ChannelSubscriberDto> filteredSubscribers
+    {
+        get
+        {
+            var result = subscribers.AsEnumerable();
+
+            if (filterPlanId.HasValue)
+                result = result.Where(s => s.PlanId == filterPlanId.Value);
+
+            if (filterStatus.HasValue)
+                result = result.Where(s => s.Status == filterStatus.Value);
+
+            return result;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        channel = await Api.GetChannelAsync(ChannelId);
+        plans = await Api.GetChannelPlansAsync(ChannelId);
+        subscribers = await Api.GetChannelSubscribersAsync(ChannelId);
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Creator", "/creator"),
+            new(channel?.Name ?? "Channel", $"/creator/channels/{ChannelId}/plans"),
+            new("Subscribers", null, disabled: true)
+        };
+    }
+
+    private bool FilterFunc(ChannelSubscriberDto subscriber)
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+            return true;
+
+        return subscriber.Email.Contains(searchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private Color GetStatusColor(SubscriptionStatus status) => status switch
+    {
+        SubscriptionStatus.Active => Color.Success,
+        SubscriptionStatus.Cancelled => Color.Warning,
+        SubscriptionStatus.Expired => Color.Error,
+        SubscriptionStatus.Pending => Color.Info,
+        _ => Color.Default
+    };
+
+    private async Task ExtendSubscription(ChannelSubscriberDto subscriber, int days)
+    {
+        var result = await Api.ExtendSubscriptionAsync(subscriber.Id, days);
+        if (result)
+        {
+            Snackbar.Add($"Extended subscription by {days} days", Severity.Success);
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add("Failed to extend subscription", Severity.Error);
+        }
+    }
+
+    private async Task CancelSubscription(ChannelSubscriberDto subscriber)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Cancel Subscription",
+            $"Are you sure you want to cancel the subscription for {subscriber.Email}?",
+            yesText: "Cancel Subscription",
+            cancelText: "Keep Active");
+
+        if (confirm == true)
+        {
+            var result = await Api.CancelSubscriptionAdminAsync(subscriber.Id);
+            if (result)
+            {
+                Snackbar.Add("Subscription cancelled", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add("Failed to cancel subscription", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ReactivateSubscription(ChannelSubscriberDto subscriber, int days)
+    {
+        var result = await Api.ReactivateSubscriptionAsync(subscriber.Id, days);
+        if (result)
+        {
+            Snackbar.Add($"Subscription reactivated for {days} days", Severity.Success);
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add("Failed to reactivate subscription", Severity.Error);
+        }
+    }
+
+    private async Task OpenChangePlanDialog(ChannelSubscriberDto subscriber)
+    {
+        var parameters = new DialogParameters<ChangePlanDialog>
+        {
+            { x => x.Subscriber, subscriber },
+            { x => x.Plans, plans }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ChangePlanDialog>("Change Plan", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data is Guid newPlanId)
+        {
+            var dto = new UpdateSubscriptionDto(null, null, newPlanId);
+            var success = await Api.UpdateSubscriptionAsync(subscriber.Id, dto);
+            if (success)
+            {
+                Snackbar.Add("Plan changed successfully", Severity.Success);
+                await LoadData();
+            }
+            else
+            {
+                Snackbar.Add("Failed to change plan", Severity.Error);
+            }
+        }
+    }
+}

@@ -1,0 +1,373 @@
+@page "/creator/channels/{ChannelId:guid}/events"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Channel Events</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+        <MudStack Spacing="0">
+            <MudBreadcrumbs Items="_breadcrumbs" Class="pa-0" />
+            <MudText Typo="Typo.h4">Events</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            New Event
+        </MudButton>
+    </MudStack>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!_events.Any())
+    {
+        <MudPaper Class="pa-8 text-center" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Large" Color="Color.Primary" Class="mb-4" Style="font-size: 4rem;" />
+            <MudText Typo="Typo.h5" Class="mb-2">No events yet</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+                Create your first event to engage with your audience.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">
+                Create Your First Event
+            </MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <MudStack Spacing="3">
+            @foreach (var evt in _events)
+            {
+                <MudPaper Class="pa-4 rounded-lg" Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default);">
+                    <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween">
+                        <MudStack Row="true" Spacing="3">
+                            <MudPaper Class="pa-3 text-center rounded-lg" Elevation="0"
+                                      Style="background: var(--mud-palette-primary); color: white; min-width: 70px;">
+                                <MudText Typo="Typo.h5" Style="line-height: 1;">@evt.EventDate.Day</MudText>
+                                <MudText Typo="Typo.caption">@evt.EventDate.ToString("MMM")</MudText>
+                                <MudText Typo="Typo.caption">@evt.EventDate.ToString("yyyy")</MudText>
+                            </MudPaper>
+                            <MudStack Spacing="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudText Typo="Typo.h6">@evt.Title</MudText>
+                                    @if (!evt.IsActive)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Inactive</MudChip>
+                                    }
+                                </MudStack>
+                                @if (!string.IsNullOrEmpty(evt.Description))
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@evt.Description</MudText>
+                                }
+                                <MudStack Row="true" Spacing="3" Class="mt-1">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mr-1" />
+                                        @evt.EventDate.ToString("h:mm tt")
+                                    </MudText>
+                                    @if (!string.IsNullOrEmpty(evt.Location))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" Class="mr-1" />
+                                            @evt.Location
+                                        </MudText>
+                                    }
+                                    @if (!string.IsNullOrEmpty(evt.ZoomLink))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Info">
+                                            <MudIcon Icon="@Icons.Material.Filled.VideoCall" Size="Size.Small" Class="mr-1" />
+                                            Zoom
+                                        </MudText>
+                                    }
+                                    @if (!string.IsNullOrEmpty(evt.StreamingLink))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Error">
+                                            <MudIcon Icon="@Icons.Material.Filled.LiveTv" Size="Size.Small" Class="mr-1" />
+                                            Streaming
+                                        </MudText>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudStack>
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
+                            <MudMenuItem OnClick="() => OpenEditDialog(evt)">
+                                <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Class="mr-2" />
+                                Edit
+                            </MudMenuItem>
+                            <MudMenuItem OnClick="() => OpenDeleteDialog(evt)">
+                                <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Class="mr-2" />
+                                <span style="color: var(--mud-palette-error);">Delete</span>
+                            </MudMenuItem>
+                        </MudMenu>
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    }
+</MudContainer>
+
+@* Create/Edit Event Dialog *@
+<MudDialog @bind-Visible="_showEventDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_isEditing ? "Edit Event" : "New Event")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_eventTitle"
+                          Label="Title"
+                          Variant="Variant.Outlined"
+                          Required="true" />
+            <MudTextField @bind-Value="_eventDescription"
+                          Label="Description"
+                          Variant="Variant.Outlined"
+                          Lines="3" />
+            <MudDatePicker @bind-Date="_eventDate"
+                           Label="Date"
+                           Variant="Variant.Outlined"
+                           Required="true" />
+            <MudTimePicker @bind-Time="_eventTime"
+                           Label="Time"
+                           Variant="Variant.Outlined" />
+
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.subtitle2">Location & Links</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">All fields are optional. An event can be in-person, online, or both.</MudText>
+
+            <MudTextField @bind-Value="_eventLocation"
+                          Label="Physical Location"
+                          Variant="Variant.Outlined"
+                          Placeholder="Address or venue name"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.LocationOn" />
+            <MudTextField @bind-Value="_eventZoomLink"
+                          Label="Zoom Link"
+                          Variant="Variant.Outlined"
+                          Placeholder="https://zoom.us/..."
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.VideoCall" />
+            <MudTextField @bind-Value="_eventStreamingLink"
+                          Label="Streaming Link"
+                          Variant="Variant.Outlined"
+                          Placeholder="YouTube, Twitch, etc."
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.LiveTv" />
+
+            @if (_isEditing)
+            {
+                <MudSwitch @bind-Value="_eventActive" Label="Event Active" Color="Color.Success" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseEventDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(string.IsNullOrWhiteSpace(_eventTitle) || _eventDate == null || _saving)"
+                   OnClick="SaveEvent">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(_isEditing ? "Save" : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Delete Confirmation Dialog *@
+<MudDialog @bind-Visible="_showDeleteDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Color="Color.Error">Delete Event</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>Are you sure you want to delete "<strong>@_eventToDelete?.Title</strong>"?</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showDeleteDialog = false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   Disabled="_deleting"
+                   OnClick="DeleteEvent">
+            @if (_deleting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Delete
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter] public Guid ChannelId { get; set; }
+
+    private bool _loading = true;
+    private List<ChannelEventDto> _events = new();
+    private List<BreadcrumbItem> _breadcrumbs = new();
+
+    // Event dialog
+    private bool _showEventDialog;
+    private bool _isEditing;
+    private bool _saving;
+    private ChannelEventDto? _eventToEdit;
+    private string _eventTitle = "";
+    private string _eventDescription = "";
+    private DateTime? _eventDate;
+    private TimeSpan? _eventTime;
+    private string _eventLocation = "";
+    private string _eventZoomLink = "";
+    private string _eventStreamingLink = "";
+    private bool _eventActive = true;
+
+    // Delete dialog
+    private bool _showDeleteDialog;
+    private bool _deleting;
+    private ChannelEventDto? _eventToDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _breadcrumbs = new()
+        {
+            new("Channels", "/creator/channels", false, Icons.Material.Filled.Tv),
+            new("Events", null, true, Icons.Material.Filled.Event)
+        };
+
+        await LoadEvents();
+    }
+
+    private async Task LoadEvents()
+    {
+        _loading = true;
+        _events = await Api.GetChannelEventsCreatorAsync(ChannelId);
+        _loading = false;
+    }
+
+    private void OpenCreateDialog()
+    {
+        _isEditing = false;
+        _eventToEdit = null;
+        _eventTitle = "";
+        _eventDescription = "";
+        _eventDate = DateTime.Today.AddDays(7);
+        _eventTime = new TimeSpan(18, 0, 0);
+        _eventLocation = "";
+        _eventZoomLink = "";
+        _eventStreamingLink = "";
+        _eventActive = true;
+        _showEventDialog = true;
+    }
+
+    private void OpenEditDialog(ChannelEventDto evt)
+    {
+        _isEditing = true;
+        _eventToEdit = evt;
+        _eventTitle = evt.Title;
+        _eventDescription = evt.Description ?? "";
+        _eventDate = evt.EventDate.Date;
+        _eventTime = evt.EventDate.TimeOfDay;
+        _eventLocation = evt.Location ?? "";
+        _eventZoomLink = evt.ZoomLink ?? "";
+        _eventStreamingLink = evt.StreamingLink ?? "";
+        _eventActive = evt.IsActive;
+        _showEventDialog = true;
+    }
+
+    private void CloseEventDialog()
+    {
+        _showEventDialog = false;
+    }
+
+    private async Task SaveEvent()
+    {
+        if (string.IsNullOrWhiteSpace(_eventTitle) || _eventDate == null) return;
+
+        var eventDateTime = _eventDate.Value.Date;
+        if (_eventTime.HasValue)
+            eventDateTime = eventDateTime.Add(_eventTime.Value);
+
+        _saving = true;
+
+        if (_isEditing && _eventToEdit != null)
+        {
+            var dto = new UpdateChannelEventDto(
+                _eventTitle.Trim(),
+                string.IsNullOrWhiteSpace(_eventDescription) ? null : _eventDescription.Trim(),
+                eventDateTime,
+                string.IsNullOrWhiteSpace(_eventLocation) ? null : _eventLocation.Trim(),
+                string.IsNullOrWhiteSpace(_eventZoomLink) ? null : _eventZoomLink.Trim(),
+                string.IsNullOrWhiteSpace(_eventStreamingLink) ? null : _eventStreamingLink.Trim(),
+                _eventActive
+            );
+
+            var result = await Api.UpdateEventAsync(_eventToEdit.Id, dto);
+            if (result != null)
+            {
+                Snackbar.Add("Event updated!", Severity.Success);
+                _showEventDialog = false;
+                await LoadEvents();
+            }
+            else
+            {
+                Snackbar.Add("Failed to update event", Severity.Error);
+            }
+        }
+        else
+        {
+            var dto = new CreateChannelEventDto(
+                ChannelId,
+                _eventTitle.Trim(),
+                string.IsNullOrWhiteSpace(_eventDescription) ? null : _eventDescription.Trim(),
+                eventDateTime,
+                string.IsNullOrWhiteSpace(_eventLocation) ? null : _eventLocation.Trim(),
+                string.IsNullOrWhiteSpace(_eventZoomLink) ? null : _eventZoomLink.Trim(),
+                string.IsNullOrWhiteSpace(_eventStreamingLink) ? null : _eventStreamingLink.Trim()
+            );
+
+            var result = await Api.CreateEventAsync(dto);
+            if (result != null)
+            {
+                Snackbar.Add("Event created!", Severity.Success);
+                _showEventDialog = false;
+                await LoadEvents();
+            }
+            else
+            {
+                Snackbar.Add("Failed to create event", Severity.Error);
+            }
+        }
+
+        _saving = false;
+    }
+
+    private void OpenDeleteDialog(ChannelEventDto evt)
+    {
+        _eventToDelete = evt;
+        _showDeleteDialog = true;
+    }
+
+    private async Task DeleteEvent()
+    {
+        if (_eventToDelete == null) return;
+
+        _deleting = true;
+        var success = await Api.DeleteEventAsync(_eventToDelete.Id);
+        _deleting = false;
+
+        if (success)
+        {
+            Snackbar.Add("Event deleted!", Severity.Success);
+            _showDeleteDialog = false;
+            await LoadEvents();
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete event", Severity.Error);
+        }
+    }
+}

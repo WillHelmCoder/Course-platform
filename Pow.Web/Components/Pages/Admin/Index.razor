@@ -1,0 +1,146 @@
+@page "/admin"
+@using MudBlazor
+@using Pow.Domain.DTOs
+@attribute [Authorize(Roles = "SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<PageTitle>Admin Dashboard</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Admin Dashboard</MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudGrid Class="mb-6">
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Class="cursor-pointer" @onclick='() => Nav.NavigateTo("/admin/users")'>
+                    <MudCardContent Class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Large" Color="Color.Primary" />
+                        <MudText Typo="Typo.h4" Class="mt-2">@_stats?.TotalUsers</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Total Users</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Class="cursor-pointer" @onclick='() => Nav.NavigateTo("/admin/plans")'>
+                    <MudCardContent Class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.CardMembership" Size="Size.Large" Color="Color.Success" />
+                        <MudText Typo="Typo.h4" Class="mt-2">@_stats?.ActiveSubscriptions</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Subscriptions</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard Class="cursor-pointer" @onclick='() => Nav.NavigateTo("/admin/channels")'>
+                    <MudCardContent Class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Large" Color="Color.Warning" />
+                        <MudText Typo="Typo.h4" Class="mt-2">@_cmsStats?.TotalChannels</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Channels</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudCard>
+                    <MudCardContent Class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Large" Color="Color.Info" />
+                        <MudText Typo="Typo.h4" Class="mt-2">@_cmsStats?.TotalContent</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Content Items</MudText>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.h6" Class="mt-4 mb-3">Administration</MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Class="cursor-pointer" @onclick='() => Nav.NavigateTo("/admin/users")'>
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <MudAvatar Color="Color.Primary" Size="Size.Large">
+                                <MudIcon Icon="@Icons.Material.Filled.People" />
+                            </MudAvatar>
+                            <div>
+                                <MudText Typo="Typo.subtitle1">Users</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Manage users and roles</MudText>
+                            </div>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Class="cursor-pointer" @onclick='() => Nav.NavigateTo("/admin/plans")'>
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <MudAvatar Color="Color.Success" Size="Size.Large">
+                                <MudIcon Icon="@Icons.Material.Filled.CardMembership" />
+                            </MudAvatar>
+                            <div>
+                                <MudText Typo="Typo.subtitle1">Plans</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Subscription plans & pricing</MudText>
+                            </div>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Class="cursor-pointer" @onclick='() => Nav.NavigateTo("/admin/channels")'>
+                    <MudCardContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            <MudAvatar Color="Color.Warning" Size="Size.Large">
+                                <MudIcon Icon="@Icons.Material.Filled.Tv" />
+                            </MudAvatar>
+                            <div>
+                                <MudText Typo="Typo.subtitle1">Channels</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Content channels & creators</MudText>
+                            </div>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+<style>
+    .cursor-pointer {
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .cursor-pointer:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+</style>
+
+@code {
+    private MembershipStatsDto? _stats;
+    private CMSStatsDto? _cmsStats;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var statsTask = Api.GetAdminStatsAsync();
+            var cmsStatsTask = Api.GetCMSStatsAsync();
+
+            await Task.WhenAll(statsTask, cmsStatsTask);
+
+            _stats = await statsTask;
+            _cmsStats = await cmsStatsTask;
+        }
+        catch
+        {
+            try { _stats = await Api.GetAdminStatsAsync(); } catch { }
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

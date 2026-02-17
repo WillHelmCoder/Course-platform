@@ -1,0 +1,250 @@
+@page "/forms/{FormId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(form?.Title ?? "Form")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="py-8">
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (form == null)
+    {
+        <MudAlert Severity="Severity.Error">Form not found or is no longer available.</MudAlert>
+    }
+    else if (alreadyCompleted)
+    {
+        <MudAlert Severity="Severity.Info">
+            You have already completed this form.
+        </MudAlert>
+    }
+    else
+    {
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@(form.FormType == FormType.Quiz ? Icons.Material.Filled.Quiz : Icons.Material.Filled.Poll)"
+                                 Color="@(form.FormType == FormType.Quiz ? Color.Secondary : Color.Primary)"
+                                 Size="Size.Large" />
+                        <div>
+                            <MudText Typo="Typo.h5">@form.Title</MudText>
+                            @if (!string.IsNullOrEmpty(form.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">@form.Description</MudText>
+                            }
+                        </div>
+                    </MudStack>
+                </CardHeaderContent>
+            </MudCardHeader>
+
+            <MudCardContent>
+                <MudStack Spacing="4">
+                    @foreach (var question in form.Questions)
+                    {
+                        <MudPaper Elevation="1" Class="pa-4">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" AlignItems="AlignItems.Start">
+                                    <MudText Typo="Typo.body1" Class="font-weight-medium">
+                                        @question.Text
+                                        @if (question.IsRequired)
+                                        {
+                                            <MudText Color="Color.Error" Typo="Typo.body1" Class="d-inline">*</MudText>
+                                        }
+                                    </MudText>
+                                </MudStack>
+
+                                @if (!string.IsNullOrEmpty(question.Description))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@question.Description</MudText>
+                                }
+
+                                @if (question.QuestionType == QuestionType.OpenText)
+                                {
+                                    <MudTextField @bind-Value="answers[question.Id].TextAnswer"
+                                                  Variant="Variant.Outlined"
+                                                  Lines="3"
+                                                  Placeholder="Enter your answer..." />
+                                }
+                                else if (question.QuestionType == QuestionType.SingleChoice)
+                                {
+                                    <MudRadioGroup @bind-Value="answers[question.Id].SelectedOptionId">
+                                        @foreach (var option in question.AnswerOptions)
+                                        {
+                                            <MudRadio Value="@((Guid?)option.Id)" Color="Color.Primary">
+                                                @option.Text
+                                            </MudRadio>
+                                        }
+                                    </MudRadioGroup>
+                                }
+                                else if (question.QuestionType == QuestionType.MultipleChoice)
+                                {
+                                    @foreach (var option in question.AnswerOptions)
+                                    {
+                                        <MudCheckBox T="bool"
+                                                     Value="@IsOptionSelected(question.Id, option.Id)"
+                                                     ValueChanged="@((bool val) => ToggleOption(question.Id, option.Id, val))"
+                                                     Color="Color.Primary"
+                                                     Label="@option.Text" />
+                                    }
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            </MudCardContent>
+
+            <MudCardActions Class="pa-4">
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Size="Size.Large"
+                           OnClick="Submit"
+                           Disabled="submitting">
+                    @if (submitting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Submit
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid FormId { get; set; }
+
+    private FormForUserDto? form;
+    private Dictionary<Guid, AnswerModel> answers = new();
+    private bool loading = true;
+    private bool submitting;
+    private bool alreadyCompleted;
+
+    protected override async Task OnInitializedAsync()
+    {
+        loading = true;
+
+        // Check if already completed
+        alreadyCompleted = await Api.HasCompletedFormAsync(FormId);
+
+        if (!alreadyCompleted)
+        {
+            form = await Api.GetFormForUserAsync(FormId);
+
+            if (form != null)
+            {
+                // Initialize answer models
+                foreach (var question in form.Questions)
+                {
+                    answers[question.Id] = new AnswerModel
+                    {
+                        QuestionId = question.Id,
+                        SelectedOptionIds = new List<Guid>()
+                    };
+                }
+            }
+        }
+
+        loading = false;
+    }
+
+    private bool IsOptionSelected(Guid questionId, Guid optionId)
+    {
+        return answers.ContainsKey(questionId) &&
+               answers[questionId].SelectedOptionIds?.Contains(optionId) == true;
+    }
+
+    private void ToggleOption(Guid questionId, Guid optionId, bool selected)
+    {
+        if (!answers.ContainsKey(questionId))
+            answers[questionId] = new AnswerModel { QuestionId = questionId, SelectedOptionIds = new List<Guid>() };
+
+        answers[questionId].SelectedOptionIds ??= new List<Guid>();
+
+        if (selected)
+        {
+            if (!answers[questionId].SelectedOptionIds.Contains(optionId))
+                answers[questionId].SelectedOptionIds.Add(optionId);
+        }
+        else
+        {
+            answers[questionId].SelectedOptionIds.Remove(optionId);
+        }
+    }
+
+    private async Task Submit()
+    {
+        if (form == null) return;
+
+        // Validate required questions
+        foreach (var question in form.Questions.Where(q => q.IsRequired))
+        {
+            var answer = answers.GetValueOrDefault(question.Id);
+            if (answer == null)
+            {
+                Snackbar.Add($"Please answer: {question.Text}", Severity.Warning);
+                return;
+            }
+
+            if (question.QuestionType == QuestionType.OpenText && string.IsNullOrWhiteSpace(answer.TextAnswer))
+            {
+                Snackbar.Add($"Please answer: {question.Text}", Severity.Warning);
+                return;
+            }
+
+            if (question.QuestionType == QuestionType.SingleChoice && !answer.SelectedOptionId.HasValue)
+            {
+                Snackbar.Add($"Please select an option for: {question.Text}", Severity.Warning);
+                return;
+            }
+
+            if (question.QuestionType == QuestionType.MultipleChoice && (answer.SelectedOptionIds == null || !answer.SelectedOptionIds.Any()))
+            {
+                Snackbar.Add($"Please select at least one option for: {question.Text}", Severity.Warning);
+                return;
+            }
+        }
+
+        submitting = true;
+
+        var submitDto = new SubmitFormDto(
+            answers.Values.Select(a => new SubmitAnswerDto(
+                a.QuestionId,
+                a.TextAnswer,
+                a.SelectedOptionId,
+                a.SelectedOptionIds?.Any() == true ? a.SelectedOptionIds : null
+            )).ToList()
+        );
+
+        var result = await Api.SubmitFormAsync(FormId, submitDto);
+
+        submitting = false;
+
+        if (result != null)
+        {
+            Snackbar.Add("Form submitted successfully!", Severity.Success);
+            Navigation.NavigateTo($"/forms/result/{result.Id}");
+        }
+        else
+        {
+            Snackbar.Add("Failed to submit form", Severity.Error);
+        }
+    }
+
+    private class AnswerModel
+    {
+        public Guid QuestionId { get; set; }
+        public string? TextAnswer { get; set; }
+        public Guid? SelectedOptionId { get; set; }
+        public List<Guid>? SelectedOptionIds { get; set; }
+    }
+}

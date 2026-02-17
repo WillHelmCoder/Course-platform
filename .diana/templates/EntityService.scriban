@@ -1,0 +1,109 @@
+{{## Project: Pow ##}}
+{{## Architecture: Xipe Boilerplate ##}}
+{{## This template was contextualized for this specific project ##}}
+
+// ╔════════════════════════════════════════════════════════════╗
+// ║                  GENERATED CODE - DO NOT EDIT              ║
+// ║            This file was generated automatically           ║
+// ║                 Any manual changes will be lost            ║
+// ╚════════════════════════════════════════════════════════════╝
+
+using Microsoft.EntityFrameworkCore;
+using {{ entities_namespace }};
+using {{ dto_namespace }};
+using {{ extensions_namespace }};
+using {{ interfaces_namespace }};
+using {{ dbcontext_namespace }};
+
+namespace {{ services_namespace }}
+{
+    public class {{ entity_name }}Service : I{{ entity_name }}Service
+    {
+        private readonly AppDbContext _db;
+
+        public {{ entity_name }}Service(AppDbContext db)
+        {
+            _db = db;
+        }
+
+        public async Task<List<{{ entity_name }}OutputDto>> GetAllAsync()
+        {
+            var entities = await _db.{{ entity_name_plural }}.ToListAsync();
+            return entities.Select(e => e.ToOutput()).ToList();
+        }
+
+        public async Task<{{ entity_name }}OutputDto?> GetByIdAsync(Guid id)
+        {
+            var entity = await _db.{{ entity_name_plural }}.FindAsync(id);
+            return entity?.ToOutput();
+        }
+
+        public async Task<{{ entity_name }}OutputDto> CreateAsync({{ entity_name }}InputDto input)
+        {
+            var entity = input.ToEntity();
+            entity.Id = Guid.NewGuid();
+            entity.CreatedAt = DateTime.UtcNow;
+{{ for relationship in belongs_to_relationships }}
+{{ if relationship.is_required }}
+
+            // Validar que {{ relationship.related_entity }} existe
+            var {{ relationship.related_entity | string.downcase }}Exists = await _db.{{ relationship.related_entity }}s
+                .AnyAsync(x => x.Id == input.{{ relationship.property }});
+            if (!{{ relationship.related_entity | string.downcase }}Exists)
+                throw new InvalidOperationException("{{ relationship.related_entity }} no encontrado");
+{{ end }}
+{{ end }}
+
+            _db.{{ entity_name_plural }}.Add(entity);
+            await _db.SaveChangesAsync();
+
+            return entity.ToOutput();
+        }
+
+        public async Task<{{ entity_name }}OutputDto?> UpdateAsync(Guid id, {{ entity_name }}InputDto input)
+        {
+            var entity = await _db.{{ entity_name_plural }}.FindAsync(id);
+            if (entity == null) return null;
+{{ for relationship in belongs_to_relationships }}
+{{ if relationship.is_required }}
+
+            // Validar que {{ relationship.related_entity }} existe
+            var {{ relationship.related_entity | string.downcase }}Exists = await _db.{{ relationship.related_entity }}s
+                .AnyAsync(x => x.Id == input.{{ relationship.property }});
+            if (!{{ relationship.related_entity | string.downcase }}Exists)
+                throw new InvalidOperationException("{{ relationship.related_entity }} no encontrado");
+{{ end }}
+{{ end }}
+
+            entity.UpdateFrom(input);
+            entity.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            return entity.ToOutput();
+        }
+
+        public async Task<bool> DeleteAsync(Guid id)
+        {
+            var entity = await _db.{{ entity_name_plural }}.FindAsync(id);
+            if (entity == null) return false;
+
+            _db.{{ entity_name_plural }}.Remove(entity);
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<int> CountAsync()
+        {
+            return await _db.{{ entity_name_plural }}.CountAsync();
+        }
+{{ for entity in unique_has_many }}
+
+        public async Task<List<{{ entity.related_entity }}>> Get{{ entity.related_entity }}sAsync(Guid {{ entity_name_lower }}Id)
+        {
+            return await _db.{{ entity.related_entity }}s
+                .Where(x => x.Id == {{ entity_name_lower }}Id)
+                .ToListAsync();
+        }
+{{ end }}
+    }
+}

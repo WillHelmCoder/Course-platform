@@ -1,0 +1,243 @@
+@page "/creator/settings"
+@using Pow.Web.Services
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Creator Settings</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="py-6">
+    <MudText Typo="Typo.h4" Class="mb-6">Settings</MudText>
+
+    @if (_loading)
+    {
+        <MudStack Spacing="4">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="80px" Class="rounded-lg" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="80px" Class="rounded-lg" />
+        </MudStack>
+    }
+    else
+    {
+        @* ===== ACCOUNT SECTION ===== *@
+        <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-2 px-1">ACCOUNT</MudText>
+        <MudPaper Class="rounded-lg mb-6" Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default); overflow: hidden;">
+            <div class="settings-item" @onclick="() => _showPasswordDialog = true">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Color="Color.Secondary" />
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body1">Password</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Change your password</MudText>
+                    </MudStack>
+                </MudStack>
+                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Secondary" />
+            </div>
+        </MudPaper>
+
+        @* ===== DANGER ZONE ===== *@
+        <MudText Typo="Typo.overline" Color="Color.Error" Class="mb-2 px-1">DANGER ZONE</MudText>
+        <MudPaper Class="rounded-lg" Elevation="0" Style="border: 1px solid var(--mud-palette-error); overflow: hidden;">
+            <div class="settings-item" @onclick="ShowDeleteConfirmation">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudIcon Icon="@Icons.Material.Filled.DeleteForever" Color="Color.Error" />
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body1" Color="Color.Error">Delete Account</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Permanently delete your account</MudText>
+                    </MudStack>
+                </MudStack>
+                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Error" />
+            </div>
+        </MudPaper>
+    }
+</MudContainer>
+
+<style>
+    .settings-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px;
+        cursor: pointer;
+        transition: background-color 0.15s;
+    }
+    .settings-item:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+</style>
+
+@* Change Password Dialog *@
+<MudDialog @bind-Visible="_showPasswordDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Change Password</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_passwordForm" @bind-IsValid="_passwordValid">
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_currentPassword"
+                              Label="Current Password"
+                              InputType="@(_showCurrentPassword ? InputType.Text : InputType.Password)"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Required"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_showCurrentPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="() => _showCurrentPassword = !_showCurrentPassword" />
+
+                <MudTextField @bind-Value="_newPassword"
+                              Label="New Password"
+                              InputType="@(_showNewPassword ? InputType.Text : InputType.Password)"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Required"
+                              Validation="@((string val) => ValidatePassword(val))"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_showNewPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="() => _showNewPassword = !_showNewPassword" />
+
+                <MudTextField @bind-Value="_confirmPassword"
+                              Label="Confirm New Password"
+                              InputType="@(_showConfirmPassword ? InputType.Text : InputType.Password)"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Required"
+                              Validation="@((string val) => val == _newPassword ? null : "Passwords don't match")"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@(_showConfirmPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="() => _showConfirmPassword = !_showConfirmPassword" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="ClosePasswordDialog" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(!_passwordValid || _changingPassword)"
+                   OnClick="ChangePassword">
+            @if (_changingPassword)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Update Password
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Delete Account Dialog *@
+<MudDialog @bind-Visible="_showDeleteDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Color="Color.Error">Delete Account</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            This action is permanent and cannot be undone.
+        </MudAlert>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            All your data, channels, content, subscriptions, and settings will be permanently deleted.
+        </MudText>
+        <MudTextField @bind-Value="_deleteConfirmation"
+                      Label="Type DELETE to confirm"
+                      Variant="Variant.Outlined"
+                      FullWidth="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _showDeleteDialog = false" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Color="Color.Error"
+                   Variant="Variant.Filled"
+                   Disabled="@(_deleteConfirmation != "DELETE" || _deleting)"
+                   OnClick="DeleteAccount">
+            @if (_deleting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Delete Account
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private bool _loading = false;
+
+    // Password dialog
+    private bool _showPasswordDialog;
+    private MudForm? _passwordForm;
+    private bool _passwordValid;
+    private string _currentPassword = "";
+    private string _newPassword = "";
+    private string _confirmPassword = "";
+    private bool _changingPassword;
+    private bool _showCurrentPassword;
+    private bool _showNewPassword;
+    private bool _showConfirmPassword;
+
+    // Delete dialog
+    private bool _showDeleteDialog;
+    private string _deleteConfirmation = "";
+    private bool _deleting;
+
+    private string? ValidatePassword(string password)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+            return "Required";
+        if (password.Length < 6)
+            return "At least 6 characters";
+        return null;
+    }
+
+    private void ClosePasswordDialog()
+    {
+        _showPasswordDialog = false;
+        _currentPassword = "";
+        _newPassword = "";
+        _confirmPassword = "";
+        _showCurrentPassword = false;
+        _showNewPassword = false;
+        _showConfirmPassword = false;
+    }
+
+    private async Task ChangePassword()
+    {
+        if (_passwordForm == null) return;
+        await _passwordForm.Validate();
+        if (!_passwordValid) return;
+
+        _changingPassword = true;
+        var (success, message) = await Api.ChangePasswordAsync(_currentPassword, _newPassword);
+        _changingPassword = false;
+
+        if (success)
+        {
+            Snackbar.Add(message, Severity.Success);
+            ClosePasswordDialog();
+        }
+        else
+        {
+            Snackbar.Add(message, Severity.Error);
+        }
+    }
+
+    private void ShowDeleteConfirmation()
+    {
+        _deleteConfirmation = "";
+        _showDeleteDialog = true;
+    }
+
+    private async Task DeleteAccount()
+    {
+        if (_deleteConfirmation != "DELETE") return;
+
+        _deleting = true;
+        var success = await Api.DeleteAccountAsync();
+        _deleting = false;
+
+        if (success)
+        {
+            await Api.LogoutAsync();
+            Nav.NavigateTo("/", forceLoad: true);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete account", Severity.Error);
+        }
+
+        _showDeleteDialog = false;
+    }
+}

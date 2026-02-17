@@ -1,0 +1,100 @@
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+
+<MudCard Class="content-card" Elevation="2">
+    @if (!string.IsNullOrEmpty(Content.MainPicture))
+    {
+        <MudCardMedia Image="@Content.MainPicture" Height="180" />
+    }
+    <MudCardContent>
+        <div class="d-flex justify-space-between align-center mb-2">
+            <MudChip T="string" Size="Size.Small" Color="@GetAccessColor()">
+                @GetAccessLabel()
+            </MudChip>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Class="mr-1" />
+                @Content.ViewCount
+            </MudText>
+        </div>
+        <MudText Typo="Typo.h6" Class="mb-2">@Content.Title</MudText>
+        @if (!string.IsNullOrEmpty(Content.Description))
+        {
+            <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                @Content.Description
+            </MudText>
+        }
+        <div class="d-flex align-center mt-2 gap-2 flex-wrap">
+            @if (!string.IsNullOrEmpty(Content.ChannelSlug))
+            {
+                <MudLink Href="@($"/content/channel/{Content.ChannelSlug}")" Class="d-flex align-center gap-1" Style="text-decoration: none;">
+                    <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Small" Color="Color.Primary" />
+                    <MudText Typo="Typo.caption" Color="Color.Primary">@Content.ChannelName</MudText>
+                </MudLink>
+            }
+            @if (Content.AuthorId.HasValue)
+            {
+                <MudLink Href="@($"/profile/{Content.AuthorId}")" Class="d-flex align-center gap-1" Style="text-decoration: none;">
+                    @if (!string.IsNullOrEmpty(Content.AuthorProfilePicture))
+                    {
+                        <MudAvatar Size="Size.Small" Image="@Content.AuthorProfilePicture" />
+                    }
+                    else
+                    {
+                        <MudAvatar Size="Size.Small" Color="Color.Primary">@((Content.AuthorName ?? "?")[0])</MudAvatar>
+                    }
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@Content.AuthorName</MudText>
+                </MudLink>
+            }
+            @if (Content.PublishedAt.HasValue)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @Content.PublishedAt.Value.ToString("MMM dd, yyyy")
+                </MudText>
+            }
+        </div>
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" Href="@($"/read/{Content.Slug}")">
+            Read More
+        </MudButton>
+    </MudCardActions>
+</MudCard>
+
+@code {
+    [Parameter]
+    public ContentListDto Content { get; set; } = null!;
+
+    private Color GetAccessColor() => Content.AccessLevel switch
+    {
+        ContentAccessLevel.Public => Color.Success,
+        ContentAccessLevel.LoggedIn => Color.Info,
+        ContentAccessLevel.AllSubscribers => Color.Warning,
+        _ => Color.Default
+    };
+
+    private string GetAccessLabel() => Content.AccessLevel switch
+    {
+        ContentAccessLevel.Public => "Public",
+        ContentAccessLevel.LoggedIn => "Members",
+        ContentAccessLevel.AllSubscribers => "Subscribers",
+        _ => "Unknown"
+    };
+}
+
+<style>
+    .content-card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .content-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+    }
+
+    .content-card .mud-card-content {
+        flex-grow: 1;
+    }
+</style>

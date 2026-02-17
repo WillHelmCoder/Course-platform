@@ -1,0 +1,370 @@
+@page "/creator/channels/{ChannelId:guid}/plans"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Subscription Plans - @(channel?.Name ?? "Channel")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    <div class="d-flex justify-space-between align-center mb-6">
+        <div>
+            <MudText Typo="Typo.h4">Subscription Plans</MudText>
+            @if (channel != null)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@channel.Name</MudText>
+            }
+        </div>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            New Plan
+        </MudButton>
+    </div>
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!plans.Any())
+    {
+        <MudAlert Severity="Severity.Info">
+            No subscription plans yet. Create your first plan to start accepting subscribers!
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid Spacing="4">
+            @foreach (var plan in plans.OrderBy(p => p.SortOrder))
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="@(plan.IsActive ? 4 : 1)" Class="@(!plan.IsActive ? "mud-card-inactive" : "")" Style="height: 100%;">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <div class="d-flex justify-space-between align-center">
+                                    <MudText Typo="Typo.h5">@plan.Name</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@(plan.IsActive ? Color.Success : Color.Default)">
+                                        @(plan.IsActive ? "Active" : "Inactive")
+                                    </MudChip>
+                                </div>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <div class="text-center mb-4">
+                                @if (plan.Price == 0)
+                                {
+                                    <MudText Typo="Typo.h3" Color="Color.Primary">Free</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.h3" Color="Color.Primary">
+                                        @plan.Currency @plan.Price.ToString("N2")
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">/@plan.Interval</MudText>
+                                }
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(plan.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                                    @plan.Description
+                                </MudText>
+                            }
+
+                            <MudDivider Class="my-3" />
+
+                            <div class="d-flex justify-space-between align-center">
+                                <MudText Typo="Typo.body2">
+                                    <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Small" Class="mr-1" />
+                                    @plan.SubscriberCount subscribers
+                                </MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Order: @plan.SortOrder
+                                </MudText>
+                            </div>
+                        </MudCardContent>
+                        <MudCardActions Class="justify-end">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           OnClick="@(() => OpenEditDialog(plan))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           Disabled="@(plan.SubscriberCount > 0)"
+                                           OnClick="@(() => ConfirmDelete(plan))" />
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+@* Create/Edit Dialog *@
+<MudDialog @bind-Visible="dialogVisible" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(editingPlan == null ? "New Plan" : "Edit Plan")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (channel != null)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4" Icon="@Icons.Material.Filled.Tv">
+                Channel: <strong>@channel.Name</strong>
+            </MudAlert>
+        }
+
+        <MudTextField @bind-Value="editModel.Name"
+                      Label="Plan Name"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      Class="mb-3" />
+
+        <MudTextField @bind-Value="editModel.Description"
+                      Label="Description"
+                      Variant="Variant.Outlined"
+                      Lines="2"
+                      Class="mb-3" />
+
+        <MudGrid>
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="editModel.Price"
+                                 Label="Price"
+                                 Variant="Variant.Outlined"
+                                 Min="0"
+                                 Format="N2" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudSelect @bind-Value="editModel.Currency"
+                           Label="Currency"
+                           Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("USD")">USD</MudSelectItem>
+                    <MudSelectItem Value="@("EUR")">EUR</MudSelectItem>
+                    <MudSelectItem Value="@("MXN")">MXN</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+
+        <MudGrid Class="mt-3">
+            <MudItem xs="6">
+                <MudSelect @bind-Value="editModel.Interval"
+                           Label="Billing Interval"
+                           Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("free")">Free (No billing)</MudSelectItem>
+                    <MudSelectItem Value="@("monthly")">Monthly</MudSelectItem>
+                    <MudSelectItem Value="@("yearly")">Yearly</MudSelectItem>
+                    <MudSelectItem Value="@("lifetime")">Lifetime</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField @bind-Value="editModel.SortOrder"
+                                 Label="Sort Order"
+                                 Variant="Variant.Outlined"
+                                 HelperText="Higher = more access" />
+            </MudItem>
+        </MudGrid>
+
+        @if (editingPlan != null)
+        {
+            <MudSwitch @bind-Value="editModel.IsActive" Label="Active" Color="Color.Primary" Class="mt-4" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SavePlan" Disabled="saving">
+            @if (saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(editingPlan == null ? "Create" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .mud-card-inactive {
+        opacity: 0.7;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public Guid ChannelId { get; set; }
+
+    private ChannelDto? channel;
+    private List<ChannelPlanDto> plans = new();
+    private bool loading = true;
+    private bool saving = false;
+    private bool dialogVisible = false;
+    private ChannelPlanDto? editingPlan;
+    private PlanEditModel editModel = new();
+
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    private DialogOptions dialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Small,
+        FullWidth = true
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+        channel = await Api.GetChannelAsync(ChannelId);
+        plans = await Api.GetChannelPlansAsync(ChannelId);
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Creator", "/creator"),
+            new(channel?.Name ?? "Channel", $"/creator/channels/{ChannelId}/plans"),
+            new("Plans", null, disabled: true)
+        };
+    }
+
+    private void OpenCreateDialog()
+    {
+        editingPlan = null;
+        editModel = new PlanEditModel
+        {
+            Currency = "USD",
+            Interval = "monthly",
+            SortOrder = plans.Any() ? plans.Max(p => p.SortOrder) + 10 : 0
+        };
+        dialogVisible = true;
+    }
+
+    private void OpenEditDialog(ChannelPlanDto plan)
+    {
+        editingPlan = plan;
+        editModel = new PlanEditModel
+        {
+            Name = plan.Name,
+            Description = plan.Description,
+            Price = plan.Price,
+            Currency = plan.Currency,
+            Interval = plan.Interval,
+            SortOrder = plan.SortOrder,
+            IsActive = plan.IsActive
+        };
+        dialogVisible = true;
+    }
+
+    private void CloseDialog()
+    {
+        dialogVisible = false;
+        editingPlan = null;
+    }
+
+    private async Task SavePlan()
+    {
+        if (string.IsNullOrWhiteSpace(editModel.Name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+
+        try
+        {
+            if (editingPlan == null)
+            {
+                var dto = new CreateChannelPlanDto(
+                    ChannelId,
+                    editModel.Name,
+                    editModel.Description,
+                    editModel.Price,
+                    editModel.Currency,
+                    editModel.Interval,
+                    editModel.SortOrder
+                );
+                var created = await Api.CreateChannelPlanAsync(dto);
+                if (created != null)
+                {
+                    Snackbar.Add("Plan created successfully", Severity.Success);
+                    await LoadData();
+                    CloseDialog();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to create plan", Severity.Error);
+                }
+            }
+            else
+            {
+                var dto = new UpdateChannelPlanDto(
+                    editModel.Name,
+                    editModel.Description,
+                    editModel.Price,
+                    editModel.Currency,
+                    editModel.Interval,
+                    editModel.SortOrder,
+                    editModel.IsActive
+                );
+                var updated = await Api.UpdateChannelPlanAsync(editingPlan.Id, dto);
+                if (updated != null)
+                {
+                    Snackbar.Add("Plan updated successfully", Severity.Success);
+                    await LoadData();
+                    CloseDialog();
+                }
+                else
+                {
+                    Snackbar.Add("Failed to update plan", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+
+        saving = false;
+    }
+
+    private async Task ConfirmDelete(ChannelPlanDto plan)
+    {
+        if (plan.SubscriberCount > 0)
+        {
+            Snackbar.Add("Cannot delete a plan with active subscribers", Severity.Warning);
+            return;
+        }
+
+        var deleted = await Api.DeleteChannelPlanAsync(plan.Id);
+        if (deleted)
+        {
+            Snackbar.Add("Plan deleted", Severity.Success);
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete plan", Severity.Error);
+        }
+    }
+
+    private class PlanEditModel
+    {
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public decimal Price { get; set; }
+        public string Currency { get; set; } = "USD";
+        public string Interval { get; set; } = "monthly";
+        public int SortOrder { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+}

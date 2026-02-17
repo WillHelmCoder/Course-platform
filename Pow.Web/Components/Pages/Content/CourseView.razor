@@ -1,0 +1,295 @@
+@page "/content/course/{Slug}"
+@page "/content/courses/{Slug}"
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject AuthStateProvider AuthState
+
+<PageTitle>@(course?.Title ?? "Course") - Pow</PageTitle>
+
+@if (loading)
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="250px" Class="mb-4 rounded-lg" />
+        <MudSkeleton Width="50%" Height="42px" Class="mb-2" />
+        <MudSkeleton Width="70%" Height="24px" Class="mb-6" />
+        <MudGrid>
+            @for (int i = 0; i < 4; i++)
+            {
+                <MudItem xs="12">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="80px" Class="rounded" />
+                </MudItem>
+            }
+        </MudGrid>
+    </MudContainer>
+}
+else if (course == null)
+{
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="py-8 text-center">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Class="mb-4" />
+        <MudText Typo="Typo.h5">Course not found</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+            The course you're looking for doesn't exist or is not published.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/channels">
+            Browse Channels
+        </MudButton>
+    </MudContainer>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+        @* Course Header *@
+        <MudPaper Class="mb-6 rounded-lg overflow-hidden" Elevation="0">
+            @if (!string.IsNullOrEmpty(course.MainPicture))
+            {
+                <MudImage Src="@course.MainPicture" Alt="@course.Title"
+                          Style="width: 100%; height: 250px; object-fit: cover;" />
+            }
+            else
+            {
+                <div style="height: 250px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;">
+                    <MudIcon Icon="@Icons.Material.Filled.School" Style="font-size: 80px; color: rgba(255,255,255,0.5);" />
+                </div>
+            }
+        </MudPaper>
+
+        <div class="d-flex flex-wrap gap-2 align-center mb-2">
+            <MudChip T="string" Size="Size.Small" Color="@GetAccessColor(course.AccessType)">
+                @GetAccessLabel(course.AccessType)
+            </MudChip>
+            <MudLink Href="@($"/content/channel/{GetChannelSlug()}")" Typo="Typo.body2" Class="mud-text-secondary">
+                @course.ChannelName
+            </MudLink>
+        </div>
+
+        <MudText Typo="Typo.h4" Class="mb-2">@course.Title</MudText>
+
+        @if (!string.IsNullOrEmpty(course.Description))
+        {
+            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+                @course.Description
+            </MudText>
+        }
+
+        <div class="d-flex gap-4 mb-6">
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                <MudIcon Icon="@Icons.Material.Filled.MenuBook" Size="Size.Small" Class="mr-1" />
+                @course.ChapterCount Chapters
+            </MudChip>
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                <MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Small" Class="mr-1" />
+                @course.ContentCount Lessons
+            </MudChip>
+        </div>
+
+        @* Purchase Section - Show if course has a price *@
+        @if (course.Price > 0)
+        {
+            <MudCard Class="mb-6 pa-4" Elevation="2" Style="background: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);">
+                <div class="d-flex flex-wrap justify-space-between align-center gap-4">
+                    <div>
+                        @if (hasPurchased)
+                        {
+                            <div class="d-flex align-center gap-2">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                                <MudText Typo="Typo.h6" Color="Color.Success">You own this course</MudText>
+                            </div>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">You have full access to all content.</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.h6">Get full access to this course</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">One-time purchase, lifetime access</MudText>
+                        }
+                    </div>
+                    <div class="d-flex align-center gap-4">
+                        <div class="text-right">
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@course.Currency @course.Price.ToString("N2")</MudText>
+                        </div>
+                        @if (!hasPurchased)
+                        {
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Size="Size.Large"
+                                       StartIcon="@Icons.Material.Filled.ShoppingCart"
+                                       OnClick="PurchaseCourse"
+                                       Disabled="purchasing">
+                                @if (purchasing)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                }
+                                Buy Now
+                            </MudButton>
+                        }
+                    </div>
+                </div>
+            </MudCard>
+        }
+
+        <MudDivider Class="mb-6" />
+
+        @* Content List *@
+        @if (contents.Any())
+        {
+            <MudText Typo="Typo.h5" Class="mb-4">Course Content</MudText>
+            <MudList T="ContentListDto" Dense="false">
+                @foreach (var content in contents)
+                {
+                    <MudListItem T="ContentListDto" Class="pa-0 mb-2">
+                        <MudPaper Class="pa-4 rounded" Elevation="1" Style="cursor: pointer;"
+                                  @onclick="() => NavigateToContent(content.Slug)">
+                            <div class="d-flex align-center gap-4">
+                                @if (!string.IsNullOrEmpty(content.MainPicture))
+                                {
+                                    <MudImage Src="@content.MainPicture" Alt="@content.Title"
+                                              Style="width: 120px; height: 70px; object-fit: cover; border-radius: 4px;" />
+                                }
+                                else
+                                {
+                                    <div style="width: 120px; height: 70px; background: var(--mud-palette-background-grey); border-radius: 4px; display: flex; align-items: center; justify-content: center;">
+                                        <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" Class="mud-text-secondary" />
+                                    </div>
+                                }
+                                <div class="flex-grow-1">
+                                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@content.Title</MudText>
+                                    @if (!string.IsNullOrEmpty(content.Description))
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">
+                                            @content.Description
+                                        </MudText>
+                                    }
+                                    @if (content.PublishedAt.HasValue)
+                                    {
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                                            @content.PublishedAt.Value.ToString("MMM dd, yyyy")
+                                        </MudText>
+                                    }
+                                </div>
+                                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Class="mud-text-secondary" />
+                            </div>
+                        </MudPaper>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info">
+                This course doesn't have any published lessons yet.
+            </MudAlert>
+        }
+    </MudContainer>
+}
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = "";
+
+    private CourseDto? course;
+    private List<ContentListDto> contents = new();
+    private bool loading = true;
+    private bool hasPurchased = false;
+    private bool purchasing = false;
+    private bool isAuthenticated = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        hasPurchased = false;
+
+        var authState = await AuthState.GetAuthenticationStateAsync();
+        isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
+
+        course = await Api.GetCourseBySlugAsync(Slug);
+
+        if (course != null)
+        {
+            contents = await Api.GetContentsByCourseAsync(Slug);
+
+            // Check if user has purchased this course (only if it has a price)
+            if (isAuthenticated && course.Price > 0)
+            {
+                hasPurchased = await Api.HasPurchasedCourseAsync(course.Id);
+            }
+        }
+
+        loading = false;
+    }
+
+    private async Task PurchaseCourse()
+    {
+        if (!isAuthenticated)
+        {
+            Nav.NavigateTo($"/login?returnUrl=/content/courses/{Slug}");
+            return;
+        }
+
+        if (course == null) return;
+
+        purchasing = true;
+        StateHasChanged();
+
+        try
+        {
+            var baseUrl = Nav.BaseUri.TrimEnd('/');
+            var successUrl = $"{baseUrl}/subscription/success";
+            var cancelUrl = $"{baseUrl}/content/courses/{Slug}";
+
+            var session = await Api.CreateCourseCheckoutSessionAsync(course.Id, successUrl, cancelUrl);
+
+            if (session != null)
+            {
+                Nav.NavigateTo(session.Url, forceLoad: true);
+            }
+            else
+            {
+                Snackbar.Add("Failed to create checkout. You may have already purchased this course.", Severity.Warning);
+                hasPurchased = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            purchasing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NavigateToContent(string slug)
+    {
+        Nav.NavigateTo($"/read/{slug}");
+    }
+
+    private string GetChannelSlug()
+    {
+        // For now, return empty - ideally the CourseDto would include the channel slug
+        return "";
+    }
+
+    private Color GetAccessColor(CourseAccessType accessType) => accessType switch
+    {
+        CourseAccessType.Free => Color.Success,
+        CourseAccessType.SubscribersOnly => Color.Warning,
+        CourseAccessType.SpecificPlan => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetAccessLabel(CourseAccessType accessType)
+    {
+        if (hasPurchased) return "Purchased";
+
+        return accessType switch
+        {
+            CourseAccessType.Free => course?.Price > 0 ? "For Sale" : "Free",
+            CourseAccessType.SubscribersOnly => "Subscribers Only",
+            CourseAccessType.SpecificPlan => "Premium",
+            _ => "Unknown"
+        };
+    }
+}

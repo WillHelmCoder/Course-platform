@@ -1,0 +1,575 @@
+@page "/creator/courses"
+@page "/creator/courses/new"
+@page "/creator/courses/{CourseId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsNew ? "New Course" : IsEditing ? "Edit Course" : "Courses")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    @if (IsNew || IsEditing)
+    {
+        @* Course Form *@
+        <MudText Typo="Typo.h4" Class="mb-6">@(IsNew ? "New Course" : "Edit Course")</MudText>
+
+        @if (IsNew && !channels.Any())
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                <MudText>You need to create a channel first before creating courses.</MudText>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/creator/channels" Class="mt-2">
+                    Go to Channels
+                </MudButton>
+            </MudAlert>
+        }
+        else
+        {
+        <MudCard>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Channel *</MudText>
+                        <MudSelect T="Guid"
+                                   Label="Select the channel for this course"
+                                   Value="editModel.ChannelId"
+                                   ValueChanged="OnChannelChanged"
+                                   Variant="Variant.Outlined"
+                                   Required="true"
+                                   Disabled="@(!IsNew)"
+                                   AnchorOrigin="Origin.BottomCenter">
+                            @foreach (var channel in channels)
+                            {
+                                <MudSelectItem Value="@channel.Id">
+                                    <div class="d-flex align-center gap-2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Small" />
+                                        <span>@channel.Name</span>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@channel.CourseCount courses</MudChip>
+                                    </div>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                        @if (!IsNew)
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">Channel cannot be changed after creation</MudText>
+                        }
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="editModel.Title"
+                                      Label="Title"
+                                      Variant="Variant.Outlined"
+                                      Required="true" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="editModel.Description"
+                                      Label="Description"
+                                      Variant="Variant.Outlined"
+                                      Lines="3" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Visibility</MudText>
+                        <MudRadioGroup @bind-Value="editModel.AccessType" Class="mb-3">
+                            <MudRadio Value="CourseAccessType.Free" Color="Color.Success">
+                                <MudText>Public</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Everyone can see this course</MudText>
+                            </MudRadio>
+                            <MudRadio Value="CourseAccessType.SubscribersOnly" Color="Color.Primary">
+                                <MudText>Subscribers Only</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Only channel subscribers can see this course</MudText>
+                            </MudRadio>
+                            <MudRadio Value="CourseAccessType.SpecificPlan" Color="Color.Secondary">
+                                <MudText>Specific Plan</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Only users with selected plan can see this course</MudText>
+                            </MudRadio>
+                        </MudRadioGroup>
+
+                        @if (editModel.AccessType == CourseAccessType.SpecificPlan)
+                        {
+                            <MudSelect T="Guid?"
+                                       Label="Required Plan"
+                                       @bind-Value="editModel.RequiredPlanId"
+                                       Variant="Variant.Outlined"
+                                       Required="true"
+                                       Class="mb-4">
+                                @foreach (var plan in channelPlans.OrderBy(p => p.SortOrder))
+                                {
+                                    <MudSelectItem Value="@((Guid?)plan.Id)">
+                                        @plan.Name (@plan.Currency @plan.Price.ToString("N2")/@plan.Interval)
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+
+                        <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Pricing</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">
+                            Set to 0 for free access, or enter a price for one-time purchase
+                        </MudText>
+                        <MudGrid>
+                            <MudItem xs="6">
+                                <MudNumericField @bind-Value="editModel.Price"
+                                                 Label="Price"
+                                                 Variant="Variant.Outlined"
+                                                 Min="0m"
+                                                 Format="N2"
+                                                 Adornment="Adornment.Start"
+                                                 AdornmentText="@editModel.Currency" />
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudSelect T="string"
+                                           Label="Currency"
+                                           @bind-Value="editModel.Currency"
+                                           Variant="Variant.Outlined">
+                                    <MudSelectItem Value="@("USD")">USD</MudSelectItem>
+                                    <MudSelectItem Value="@("EUR")">EUR</MudSelectItem>
+                                    <MudSelectItem Value="@("MXN")">MXN</MudSelectItem>
+                                    <MudSelectItem Value="@("GBP")">GBP</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                        </MudGrid>
+                        @if (editModel.Price == 0)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Success" Class="mt-1">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                Free for @GetVisibilityLabel(editModel.AccessType)
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Info" Class="mt-1">
+                                <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Size="Size.Small" Class="mr-1" />
+                                @editModel.Currency @editModel.Price.ToString("N2") for @GetVisibilityLabel(editModel.AccessType)
+                            </MudText>
+                        }
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <MudStack>
+                            <MudFileUpload T="IBrowserFile"
+                                           Accept="image/*"
+                                           FilesChanged="OnImageSelected"
+                                           MaximumFileCount="1">
+                                <ActivatorContent>
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.CloudUpload"
+                                               Disabled="uploadingImage">
+                                        @if (uploadingImage)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                            <text>Uploading...</text>
+                                        }
+                                        else
+                                        {
+                                            <text>Upload Main Picture</text>
+                                        }
+                                    </MudButton>
+                                </ActivatorContent>
+                            </MudFileUpload>
+
+                            @if (!string.IsNullOrEmpty(editModel.MainPicture))
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mt-2">
+                                    <MudImage Src="@($"https://localhost:7451{editModel.MainPicture}")"
+                                              Alt="Course image"
+                                              Width="80"
+                                              Height="60"
+                                              ObjectFit="ObjectFit.Cover"
+                                              Class="rounded" />
+                                    <MudText Typo="Typo.caption" Class="ml-2">Image uploaded</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                   Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   OnClick="() => editModel.MainPicture = null" />
+                                </MudStack>
+                            }
+
+                            <MudTextField @bind-Value="editModel.MainPicture"
+                                          Label="Or enter URL manually"
+                                          Variant="Variant.Outlined"
+                                          Placeholder="https://example.com/image.jpg" />
+                        </MudStack>
+                    </MudItem>
+                    @if (!IsNew)
+                    {
+                        <MudItem xs="12" md="3">
+                            <MudNumericField @bind-Value="editModel.SortOrder"
+                                             Label="Sort Order"
+                                             Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="3">
+                            <MudStack Row="true" Class="mt-2">
+                                <MudSwitch @bind-Value="editModel.IsActive" Label="Active" Color="Color.Primary" />
+                                <MudSwitch @bind-Value="editModel.IsPublished" Label="Published" Color="Color.Success" />
+                            </MudStack>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudCardContent>
+            <MudCardActions Class="pa-4">
+                <MudButton Variant="Variant.Text" OnClick="Cancel">Cancel</MudButton>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="Save"
+                           Disabled="saving">
+                    @if (saving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    @(IsNew ? "Create" : "Save")
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+        }
+    }
+    else
+    {
+        @* Course List *@
+        <div class="d-flex justify-space-between align-center mb-6">
+            <MudText Typo="Typo.h4">My Courses</MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Href="/creator/courses/new"
+                       Disabled="@(!channels.Any())">
+                New Course
+            </MudButton>
+        </div>
+
+        @if (loading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (!courses.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No courses yet. Create your first course to get started!
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@courses" Hover="true" Elevation="2" Filter="FilterFunc">
+                <ToolBarContent>
+                    <MudTextField @bind-Value="searchText"
+                                  Placeholder="Search courses..."
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  IconSize="Size.Medium"
+                                  Class="mt-0"
+                                  Immediate="true" />
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CourseDto, object>(x => x.Title)">Title</MudTableSortLabel></MudTh>
+                    <MudTh>Channel</MudTh>
+                    <MudTh>Access</MudTh>
+                    <MudTh>Chapters</MudTh>
+                    <MudTh>Content</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Title">
+                        <MudLink Href="@($"/creator/courses/{context.Id}")">@context.Title</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Channel">@context.ChannelName</MudTd>
+                    <MudTd DataLabel="Access">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudChip T="string" Size="Size.Small" Color="@GetAccessColor(context.AccessType)">
+                                @GetAccessLabel(context.AccessType)
+                            </MudChip>
+                            @if (context.Price > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">
+                                    @context.Currency @context.Price.ToString("N2")
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success">Free</MudChip>
+                            }
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Chapters">@context.ChapterCount</MudTd>
+                    <MudTd DataLabel="Content">@context.ContentCount</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@(context.IsPublished ? Color.Success : Color.Warning)">
+                            @(context.IsPublished ? "Published" : "Draft")
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Href="@($"/creator/courses/{context.Id}")" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Folder"
+                                       Size="Size.Small"
+                                       Href="@($"/creator/courses/{context.Id}/chapters")" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="@(() => ConfirmDelete(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    }
+</MudContainer>
+
+@implements IDisposable
+
+@code {
+    [Parameter]
+    public Guid? CourseId { get; set; }
+
+    private List<ChannelDto> channels = new();
+    private List<CourseDto> courses = new();
+    private List<ChannelPlanDto> channelPlans = new();
+    private bool loading = true;
+    private bool saving;
+    private bool uploadingImage;
+    private string searchText = "";
+
+    private bool IsNew => Navigation.Uri.EndsWith("/new", StringComparison.OrdinalIgnoreCase);
+    private bool IsEditing => CourseId.HasValue && !IsNew;
+
+    private CourseEditModel editModel = new();
+
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        channels = await Api.GetMyChannelsAsync();
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            BuildBreadcrumbs();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+
+        if (IsEditing && CourseId.HasValue)
+        {
+            var course = await Api.GetCourseAsync(CourseId.Value);
+            if (course != null)
+            {
+                editModel = new CourseEditModel
+                {
+                    ChannelId = course.ChannelId,
+                    Title = course.Title,
+                    Description = course.Description,
+                    MainPicture = course.MainPicture,
+                    IsActive = course.IsActive,
+                    IsPublished = course.IsPublished,
+                    AccessType = course.AccessType,
+                    RequiredPlanId = course.RequiredPlanId,
+                    SortOrder = course.SortOrder,
+                    Price = course.Price,
+                    Currency = course.Currency
+                };
+                // Load channel plans
+                channelPlans = await Api.GetChannelPlansAsync(course.ChannelId);
+            }
+        }
+        else if (IsNew)
+        {
+            editModel = new CourseEditModel();
+            if (channels.Any())
+            {
+                editModel.ChannelId = channels.First().Id;
+                // Load channel plans for the first channel
+                channelPlans = await Api.GetChannelPlansAsync(channels.First().Id);
+            }
+        }
+        else
+        {
+            courses = await Api.GetMyCoursesAsync();
+        }
+
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Creator", "/creator"),
+            new("Courses", "/creator/courses")
+        };
+
+        if (IsNew)
+        {
+            breadcrumbs.Add(new("New", null, disabled: true));
+        }
+        else if (IsEditing)
+        {
+            breadcrumbs.Add(new("Edit", null, disabled: true));
+        }
+    }
+
+    private bool FilterFunc(CourseDto course) =>
+        string.IsNullOrWhiteSpace(searchText) ||
+        course.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase);
+
+    private async Task Save()
+    {
+        saving = true;
+
+        if (IsNew)
+        {
+            var planId = editModel.AccessType == CourseAccessType.SpecificPlan ? editModel.RequiredPlanId : null;
+            var dto = new CreateCourseDto(editModel.ChannelId, editModel.Title, editModel.Description, editModel.MainPicture, editModel.AccessType, planId, editModel.Price > 0, editModel.Price, editModel.Currency);
+            var created = await Api.CreateCourseAsync(dto);
+            if (created != null)
+            {
+                Snackbar.Add("Course created successfully", Severity.Success);
+                Navigation.NavigateTo($"/creator/courses/{created.Id}");
+            }
+            else
+            {
+                Snackbar.Add("Failed to create course", Severity.Error);
+            }
+        }
+        else if (CourseId.HasValue)
+        {
+            var planId = editModel.AccessType == CourseAccessType.SpecificPlan ? editModel.RequiredPlanId : null;
+            var dto = new UpdateCourseDto(editModel.Title, editModel.Description, editModel.MainPicture, editModel.IsActive, editModel.IsPublished, editModel.AccessType, planId, editModel.SortOrder, editModel.Price > 0, editModel.Price, editModel.Currency);
+            var updated = await Api.UpdateCourseAsync(CourseId.Value, dto);
+            if (updated != null)
+            {
+                Snackbar.Add("Course updated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to update course", Severity.Error);
+            }
+        }
+
+        saving = false;
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/creator/courses");
+    }
+
+    private async Task ConfirmDelete(CourseDto course)
+    {
+        var deleted = await Api.DeleteCourseAsync(course.Id);
+        if (deleted)
+        {
+            courses.Remove(course);
+            Snackbar.Add("Course deleted", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete course", Severity.Error);
+        }
+    }
+
+    private async Task OnImageSelected(IBrowserFile file)
+    {
+        if (file == null) return;
+
+        uploadingImage = true;
+        StateHasChanged();
+
+        try
+        {
+            var imageUrl = await Api.UploadImageAsync(file);
+            if (imageUrl != null)
+            {
+                editModel.MainPicture = imageUrl;
+                Snackbar.Add("Image uploaded successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to upload image", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error uploading image: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            uploadingImage = false;
+            StateHasChanged();
+        }
+    }
+
+    private class CourseEditModel
+    {
+        public Guid ChannelId { get; set; }
+        public string Title { get; set; } = "";
+        public string? Description { get; set; }
+        public string? MainPicture { get; set; }
+        public bool IsActive { get; set; } = true;
+        public bool IsPublished { get; set; }
+        public CourseAccessType AccessType { get; set; } = CourseAccessType.Free;
+        public Guid? RequiredPlanId { get; set; }
+        public int SortOrder { get; set; }
+        public decimal Price { get; set; } = 0;
+        public string Currency { get; set; } = "USD";
+    }
+
+    private async Task OnChannelChanged(Guid channelId)
+    {
+        editModel.ChannelId = channelId;
+        channelPlans = await Api.GetChannelPlansAsync(channelId);
+        editModel.RequiredPlanId = null; // Reset plan when channel changes
+        StateHasChanged();
+    }
+
+    private string GetAccessLabel(CourseAccessType accessType) => accessType switch
+    {
+        CourseAccessType.Free => "Public",
+        CourseAccessType.SubscribersOnly => "Subscribers",
+        CourseAccessType.SpecificPlan => "Plan",
+        _ => "Unknown"
+    };
+
+    private Color GetAccessColor(CourseAccessType accessType) => accessType switch
+    {
+        CourseAccessType.Free => Color.Default,
+        CourseAccessType.SubscribersOnly => Color.Primary,
+        CourseAccessType.SpecificPlan => Color.Secondary,
+        _ => Color.Default
+    };
+
+    private string GetVisibilityLabel(CourseAccessType accessType) => accessType switch
+    {
+        CourseAccessType.Free => "everyone",
+        CourseAccessType.SubscribersOnly => "subscribers",
+        CourseAccessType.SpecificPlan => "plan members",
+        _ => "users"
+    };
+}

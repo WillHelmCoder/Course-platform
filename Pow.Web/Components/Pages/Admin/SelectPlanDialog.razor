@@ -1,0 +1,77 @@
+@using MudBlazor
+@using Pow.Domain.DTOs
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Select Plan</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudRadioGroup T="Guid" @bind-Value="_selectedPlanId">
+            @foreach (var plan in Plans)
+            {
+                <MudRadio T="Guid" Value="plan.Id" Color="Color.Primary">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText>@plan.Name</MudText>
+                        <MudText Color="Color.Secondary">
+                            @if (plan.Price == 0)
+                            {
+                                <span>Free</span>
+                            }
+                            else
+                            {
+                                <span>@plan.Currency @plan.Price/@plan.Interval</span>
+                            }
+                        </MudText>
+                    </MudStack>
+                </MudRadio>
+            }
+        </MudRadioGroup>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save"
+                   Disabled="@(_saving || _selectedPlanId == Guid.Empty)">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Assign Plan
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public Guid UserId { get; set; }
+    [Parameter] public List<PlanDto> Plans { get; set; } = new();
+
+    private Guid _selectedPlanId;
+    private bool _saving;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        _saving = true;
+        try
+        {
+            var success = await Api.AssignPlanToUserAsync(UserId, _selectedPlanId);
+            if (success)
+            {
+                Snackbar.Add("Plan assigned", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                Snackbar.Add("Failed to assign plan", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

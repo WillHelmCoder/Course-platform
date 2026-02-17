@@ -1,0 +1,158 @@
+@page "/content"
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@using Pow.Web.Components.Shared
+@inject ApiService Api
+
+<PageTitle>Content</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudText Typo="Typo.h4" Class="mb-4">All Content</MudText>
+
+    @* Filters *@
+    <MudPaper Class="pa-4 mb-4" Elevation="0" Outlined="true">
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="4">
+                <MudSelect T="Guid?"
+                           Label="Channel"
+                           Value="selectedChannelId"
+                           ValueChanged="OnChannelChanged"
+                           Variant="Variant.Outlined"
+                           Clearable="true">
+                    @foreach (var channel in channels)
+                    {
+                        <MudSelectItem Value="@((Guid?)channel.Id)">@channel.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="4">
+                <MudTextField @bind-Value="searchText"
+                              Label="Search"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true"
+                              DebounceInterval="300" />
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (loading)
+    {
+        <MudGrid>
+            @for (int i = 0; i < 6; i++)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard>
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="180px" />
+                        <MudCardContent>
+                            <MudSkeleton Width="30%" Height="24px" Class="mb-2" />
+                            <MudSkeleton Width="80%" Height="32px" Class="mb-2" />
+                            <MudSkeleton Width="100%" Height="48px" />
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else if (!filteredContents.Any())
+    {
+        <MudAlert Severity="Severity.Info">
+            No content found. Check back later for new articles!
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var content in filteredContents)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <ContentCard Content="@content" />
+                </MudItem>
+            }
+        </MudGrid>
+
+        @if (hasMore)
+        {
+            <div class="d-flex justify-center mt-6">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           OnClick="LoadMore"
+                           Disabled="loadingMore">
+                    @if (loadingMore)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Load More
+                </MudButton>
+            </div>
+        }
+    }
+</MudContainer>
+
+@code {
+    private List<ContentListDto> contents = new();
+    private List<ChannelDto> channels = new();
+    private bool loading = true;
+    private bool loadingMore;
+    private bool hasMore = true;
+    private int skip = 0;
+    private const int Take = 12;
+
+    private Guid? selectedChannelId;
+    private string searchText = "";
+
+    private IEnumerable<ContentListDto> filteredContents => contents
+        .Where(c => string.IsNullOrEmpty(searchText) ||
+                    c.Title.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+                    (c.Description?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        channels = await Api.GetPublicChannelsAsync();
+        await LoadContents();
+    }
+
+    private async Task LoadContents()
+    {
+        loading = true;
+
+        var newContents = await Api.GetPublishedContentsAsync(Take, skip);
+        hasMore = newContents.Count == Take;
+
+        contents.AddRange(newContents);
+        skip += newContents.Count;
+        loading = false;
+    }
+
+    private async Task LoadMore()
+    {
+        loadingMore = true;
+        var newContents = await Api.GetPublishedContentsAsync(Take, skip);
+        contents.AddRange(newContents);
+        skip += newContents.Count;
+        hasMore = newContents.Count == Take;
+        loadingMore = false;
+    }
+
+    private async Task OnChannelChanged(Guid? channelId)
+    {
+        selectedChannelId = channelId;
+        skip = 0;
+        contents.Clear();
+
+        if (channelId.HasValue)
+        {
+            var channel = channels.FirstOrDefault(c => c.Id == channelId);
+            if (channel != null)
+            {
+                contents = await Api.GetContentsByChannelAsync(channel.Slug);
+                hasMore = false;
+            }
+        }
+        else
+        {
+            await LoadContents();
+        }
+    }
+}

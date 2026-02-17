@@ -1,0 +1,397 @@
+@page "/register"
+@page "/auth/register"
+@page "/register/channel/{ChannelSlug}"
+@using Pow.Domain.DTOs
+@inject ApiService Api
+@inject AuthStateProvider AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(channel != null ? $"Join {channel.Name}" : "Create Account") - Pow</PageTitle>
+
+<MudContainer MaxWidth="@(channel != null ? MaxWidth.Large : MaxWidth.ExtraSmall)"
+              Class="d-flex justify-center align-center"
+              Style="min-height: calc(100vh - 120px);">
+
+    @if (channel != null)
+    {
+        @* Channel-specific registration with plan selection *@
+        <MudGrid Justify="Justify.Center" Spacing="4" Style="width: 100%;">
+            @* Channel Info Card *@
+            <MudItem xs="12" md="4">
+                <MudCard Elevation="4" Class="pa-4" Style="position: sticky; top: 20px;">
+                    <MudCardContent>
+                        @if (!string.IsNullOrEmpty(channel.MainPicture))
+                        {
+                            <MudImage Src="@channel.MainPicture" Alt="@channel.Name"
+                                      Width="100" Height="100" ObjectFit="ObjectFit.Cover"
+                                      Class="rounded-circle mx-auto d-block mb-4" />
+                        }
+                        else
+                        {
+                            <MudAvatar Size="Size.Large" Color="Color.Primary" Class="mx-auto d-block mb-4" Style="width: 100px; height: 100px; font-size: 2rem;">
+                                @channel.Name[0]
+                            </MudAvatar>
+                        }
+                        <MudText Typo="Typo.h5" Align="Align.Center" Class="mb-2">@channel.Name</MudText>
+                        @if (!string.IsNullOrEmpty(channel.Description))
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                                @channel.Description
+                            </MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Registration Form *@
+            <MudItem xs="12" md="8">
+                <MudCard Elevation="4" Class="pa-4">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h4" Class="mb-4">Join @channel.Name</MudText>
+
+                        @* Step 1: Account Details *@
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Class="mr-2" />
+                            Account Details
+                        </MudText>
+
+                        <MudTextField T="string" @bind-Value="model.Email" Label="Email" Variant="Variant.Outlined"
+                                      InputType="InputType.Email" Required="true" Class="mb-3" />
+
+                        <MudTextField T="string" @bind-Value="model.PhoneNumber" Label="Celular" Variant="Variant.Outlined"
+                                      InputType="InputType.Telephone" Class="mb-3" Placeholder="+52 1234567890" />
+
+                        <MudGrid>
+                            <MudItem xs="12" md="6">
+                                <MudTextField T="string" @bind-Value="model.Password" Label="Password" Variant="Variant.Outlined"
+                                              InputType="@(_showPassword ? InputType.Text : InputType.Password)" Required="true"
+                                              HelperText="At least 6 characters"
+                                              Adornment="Adornment.End" AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                              OnAdornmentClick="() => _showPassword = !_showPassword" AdornmentAriaLabel="Mostrar contraseña" />
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudTextField T="string" @bind-Value="model.ConfirmPassword" Label="Confirm Password" Variant="Variant.Outlined"
+                                              InputType="@(_showConfirmPassword ? InputType.Text : InputType.Password)" Required="true"
+                                              Adornment="Adornment.End" AdornmentIcon="@(_showConfirmPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                              OnAdornmentClick="() => _showConfirmPassword = !_showConfirmPassword" AdornmentAriaLabel="Mostrar contraseña" />
+                            </MudItem>
+                        </MudGrid>
+
+                        <MudDivider Class="my-6" />
+
+                        @* Step 2: Select Plan *@
+                        <MudText Typo="Typo.h6" Class="mb-3">
+                            <MudIcon Icon="@Icons.Material.Filled.CreditCard" Class="mr-2" />
+                            Choose Your Plan
+                        </MudText>
+
+                        @if (loadingPlans)
+                        {
+                            <MudProgressLinear Indeterminate="true" />
+                        }
+                        else if (channelPlans.Count == 0)
+                        {
+                            <MudAlert Severity="Severity.Info">
+                                This channel doesn't have subscription plans yet. You can still create an account.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudGrid Spacing="3">
+                                @foreach (var plan in channelPlans)
+                                {
+                                    <MudItem xs="12" sm="6" md="4">
+                                        <MudCard Elevation="@(selectedPlanId == plan.Id ? 8 : 2)"
+                                                 Class="@(selectedPlanId == plan.Id ? "selected-plan" : "")"
+                                                 Style="height: 100%; cursor: pointer;"
+                                                 @onclick="() => selectedPlanId = plan.Id">
+                                            <MudCardContent Class="text-center">
+                                                <MudText Typo="Typo.h6">@plan.Name</MudText>
+                                                @if (plan.Price == 0)
+                                                {
+                                                    <MudText Typo="Typo.h4" Color="Color.Primary" Class="my-2">Free</MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.h4" Color="Color.Primary" Class="my-2">
+                                                        @plan.Currency @plan.Price.ToString("N2")
+                                                    </MudText>
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        /@plan.Interval
+                                                    </MudText>
+                                                }
+                                                @if (!string.IsNullOrEmpty(plan.Description))
+                                                {
+                                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                                                        @plan.Description
+                                                    </MudText>
+                                                }
+                                            </MudCardContent>
+                                        </MudCard>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                        }
+                    </MudCardContent>
+                    <MudCardActions Class="pa-4">
+                        <MudButton ButtonType="ButtonType.Button" Variant="Variant.Filled" Color="Color.Primary"
+                                   FullWidth="true" Disabled="isLoading" OnClick="HandleChannelRegister">
+                            @if (isLoading)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Create Account & Subscribe
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+
+                <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-4">
+                    Already have an account? <MudLink Href="/login">Login</MudLink> and subscribe from your dashboard.
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    }
+    else
+    {
+        @* Simple registration (no channel) *@
+        <MudCard Elevation="4" Class="pa-4" Style="width: 100%;">
+            <MudCardContent>
+                <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-4">Create Account</MudText>
+
+                <MudAlert Severity="Severity.Info" Class="mb-4">
+                    Looking to subscribe to a channel? <MudLink Href="/channels">Browse channels</MudLink> first,
+                    then register from there to get the full experience.
+                </MudAlert>
+
+                <EditForm Model="model" OnValidSubmit="HandleSimpleRegister">
+                    <DataAnnotationsValidator />
+
+                    <MudTextField T="string" @bind-Value="model.Email" Label="Email" Variant="Variant.Outlined"
+                                  InputType="InputType.Email" Required="true" Class="mb-3" />
+
+                    <MudTextField T="string" @bind-Value="model.PhoneNumber" Label="Celular" Variant="Variant.Outlined"
+                                  InputType="InputType.Telephone" Class="mb-3" Placeholder="+52 1234567890" />
+
+                    <MudTextField T="string" @bind-Value="model.Password" Label="Password" Variant="Variant.Outlined"
+                                  InputType="@(_showPassword ? InputType.Text : InputType.Password)" Required="true" Class="mb-3"
+                                  HelperText="At least 6 characters"
+                                  Adornment="Adornment.End" AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="() => _showPassword = !_showPassword" AdornmentAriaLabel="Mostrar contraseña" />
+
+                    <MudTextField T="string" @bind-Value="model.ConfirmPassword" Label="Confirm Password" Variant="Variant.Outlined"
+                                  InputType="@(_showConfirmPassword ? InputType.Text : InputType.Password)" Required="true" Class="mb-4"
+                                  Adornment="Adornment.End" AdornmentIcon="@(_showConfirmPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="() => _showConfirmPassword = !_showConfirmPassword" AdornmentAriaLabel="Mostrar contraseña" />
+
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                               FullWidth="true" Disabled="isLoading">
+                        @if (isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Register
+                    </MudButton>
+                </EditForm>
+
+                <MudDivider Class="my-4" />
+
+                <MudStack Justify="Justify.Center" Spacing="2">
+                    <MudText Typo="Typo.body2" Align="Align.Center">
+                        <MudLink Href="/login">Already have an account? Login</MudLink>
+                    </MudText>
+                    <MudText Typo="Typo.body2" Align="Align.Center">
+                        <MudLink Href="/register/creator">Want to create content? Become a Creator</MudLink>
+                    </MudText>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    }
+</MudContainer>
+
+<style>
+    .selected-plan {
+        border: 3px solid var(--mud-palette-primary) !important;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string? ChannelSlug { get; set; }
+
+    private RegisterModel model = new();
+    private ChannelDto? channel;
+    private List<ChannelPlanDto> channelPlans = new();
+    private Guid? selectedPlanId;
+    private bool isLoading = false;
+    private bool loadingPlans = true;
+    private bool _showPassword = false;
+    private bool _showConfirmPassword = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(ChannelSlug))
+        {
+            await LoadChannelData();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(ChannelSlug) && (channel == null || channel.Slug != ChannelSlug))
+        {
+            await LoadChannelData();
+        }
+    }
+
+    private async Task LoadChannelData()
+    {
+        loadingPlans = true;
+        try
+        {
+            channel = await Api.GetChannelBySlugAsync(ChannelSlug!);
+            if (channel != null)
+            {
+                channelPlans = await Api.GetChannelPlansAsync(channel.Id);
+                // Auto-select free plan or first one
+                var freePlan = channelPlans.FirstOrDefault(p => p.Price == 0);
+                selectedPlanId = freePlan?.Id ?? channelPlans.FirstOrDefault()?.Id;
+            }
+            else
+            {
+                Snackbar.Add("Channel not found", Severity.Warning);
+                Nav.NavigateTo("/channels");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading channel: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loadingPlans = false;
+        }
+    }
+
+    private bool ValidateForm()
+    {
+        if (string.IsNullOrWhiteSpace(model.Email))
+        {
+            Snackbar.Add("Email is required", Severity.Warning);
+            return false;
+        }
+
+        if (model.Password != model.ConfirmPassword)
+        {
+            Snackbar.Add("Passwords do not match", Severity.Warning);
+            return false;
+        }
+
+        if (model.Password.Length < 6)
+        {
+            Snackbar.Add("Password must be at least 6 characters", Severity.Warning);
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task HandleChannelRegister()
+    {
+        if (!ValidateForm()) return;
+
+        isLoading = true;
+
+        try
+        {
+            var selectedPlan = channelPlans.FirstOrDefault(p => p.Id == selectedPlanId);
+            var isPaidPlan = selectedPlan != null && selectedPlan.Price > 0;
+
+            // For paid plans, register without plan - we'll assign after Stripe payment
+            var result = await Api.RegisterWithChannelAsync(
+                model.Email,
+                model.Password,
+                channel!.Id,
+                isPaidPlan ? null : selectedPlanId,
+                model.PhoneNumber);
+
+            if (result.Success && result.Token != null && result.RefreshToken != null)
+            {
+                await AuthState.LoginAsync(result.Token, result.RefreshToken);
+
+                if (isPaidPlan && selectedPlanId.HasValue)
+                {
+                    // Redirect to Stripe checkout for paid plans
+                    var baseUrl = Nav.BaseUri.TrimEnd('/');
+                    var successUrl = $"{baseUrl}/subscription/success";
+                    var cancelUrl = $"{baseUrl}/content/channel/{channel.Slug}";
+
+                    var session = await Api.CreateCheckoutSessionAsync(selectedPlanId.Value, successUrl, cancelUrl);
+
+                    if (session != null)
+                    {
+                        Snackbar.Add("Redirecting to payment...", Severity.Info);
+                        Nav.NavigateTo(session.Url, forceLoad: true);
+                    }
+                    else
+                    {
+                        Snackbar.Add($"Account created! Subscribe from the channel page.", Severity.Warning);
+                        Nav.NavigateTo($"/content/channel/{channel.Slug}");
+                    }
+                }
+                else
+                {
+                    Snackbar.Add($"Welcome! You're now subscribed to {channel.Name}", Severity.Success);
+                    Nav.NavigateTo($"/content/channel/{channel.Slug}");
+                }
+            }
+            else
+            {
+                Snackbar.Add(result.Message ?? "Registration failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+
+        isLoading = false;
+    }
+
+    private async Task HandleSimpleRegister()
+    {
+        if (!ValidateForm()) return;
+
+        isLoading = true;
+
+        try
+        {
+            var result = await Api.RegisterAsync(model.Email, model.Password, model.PhoneNumber);
+
+            if (result.Success && result.Token != null && result.RefreshToken != null)
+            {
+                await AuthState.LoginAsync(result.Token, result.RefreshToken);
+                Snackbar.Add("Account created successfully!", Severity.Success);
+                Nav.NavigateTo("/channels");
+            }
+            else
+            {
+                Snackbar.Add(result.Message ?? "Registration failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+
+        isLoading = false;
+    }
+
+    private class RegisterModel
+    {
+        public string Email { get; set; } = "";
+        public string PhoneNumber { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

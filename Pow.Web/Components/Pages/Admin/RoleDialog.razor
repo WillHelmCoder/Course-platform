@@ -1,0 +1,115 @@
+@using MudBlazor
+@using Pow.Domain.DTOs
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(IsNew ? "New Role" : "Edit Role")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12">
+                <MudTextField T="string" @bind-Value="_name" Label="Name" Required="true" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField T="string" @bind-Value="_description" Label="Description" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Permissions</MudText>
+                @foreach (var category in AllPermissions.GroupBy(p => p.Category ?? "Other"))
+                {
+                    <MudText Typo="Typo.overline" Color="Color.Secondary">@category.Key</MudText>
+                    <MudStack Row="true" Wrap="Wrap.Wrap" Class="mb-2">
+                        @foreach (var perm in category)
+                        {
+                            <MudCheckBox T="bool"
+                                         Value="_selectedPermissions.Contains(perm.Id)"
+                                         ValueChanged="@(v => TogglePermission(perm.Id, v))"
+                                         Label="@perm.Name"
+                                         Size="Size.Small" />
+                        }
+                    </MudStack>
+                }
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public RoleDto? Role { get; set; }
+    [Parameter] public bool IsNew { get; set; }
+    [Parameter] public List<PermissionDto> AllPermissions { get; set; } = new();
+
+    private string _name = "";
+    private string? _description;
+    private HashSet<Guid> _selectedPermissions = new();
+    private bool _saving;
+
+    protected override void OnInitialized()
+    {
+        if (Role != null)
+        {
+            _name = Role.Name;
+            _description = Role.Description;
+            foreach (var perm in AllPermissions.Where(p => Role.Permissions.Contains(p.Name)))
+            {
+                _selectedPermissions.Add(perm.Id);
+            }
+        }
+    }
+
+    private void TogglePermission(Guid permId, bool selected)
+    {
+        if (selected) _selectedPermissions.Add(permId);
+        else _selectedPermissions.Remove(permId);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var permissionIds = _selectedPermissions.ToList();
+
+            if (IsNew)
+            {
+                var dto = new CreateRoleDto(_name, _description, permissionIds);
+                await Api.CreateRoleAsync(dto);
+                Snackbar.Add("Role created", Severity.Success);
+            }
+            else
+            {
+                var dto = new UpdateRoleDto(_name, _description, permissionIds);
+                await Api.UpdateRoleAsync(Role!.Id, dto);
+                Snackbar.Add("Role updated", Severity.Success);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

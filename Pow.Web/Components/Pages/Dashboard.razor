@@ -1,0 +1,227 @@
+@page "/dashboard"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Pow.Domain.DTOs
+@attribute [Authorize]
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Dashboard - Pow</PageTitle>
+
+@if (loading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+        <MudText Typo="Typo.h4" Class="mb-6">Welcome back, @userName!</MudText>
+
+        @* User Stats *@
+        <MudGrid Class="mb-6">
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Subscriptions" Size="Size.Large" Color="Color.Primary" />
+                    <MudText Typo="Typo.h4" Class="my-2">@subscriptions.Count</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">My Subscriptions</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Large" Color="Color.Secondary" />
+                    <MudText Typo="Typo.h4" Class="my-2">@coursesAccess</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Courses Access</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Visibility" Size="Size.Large" Color="Color.Tertiary" />
+                    <MudText Typo="Typo.h4" Class="my-2">@contentViewed</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Content Viewed</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Class="pa-4 text-center" Elevation="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Favorite" Size="Size.Large" Color="Color.Error" />
+                    <MudText Typo="Typo.h4" Class="my-2">@favorites</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Favorites</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* My Subscriptions *@
+        <MudText Typo="Typo.h5" Class="mb-4">My Subscriptions</MudText>
+
+        @if (!subscriptions.Any())
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-6">
+                <MudText>You don't have any subscriptions yet.</MudText>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/channels" Class="mt-2">
+                    Explore Channels
+                </MudButton>
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid Class="mb-6">
+                @foreach (var sub in subscriptions)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard>
+                            <MudCardContent>
+                                <MudText Typo="Typo.h6">@sub.ChannelName</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="mt-2">
+                                    @sub.PlanName
+                                </MudChip>
+                                <MudText Typo="Typo.caption" Class="d-block mt-2">
+                                    @if (sub.ExpiresAt.HasValue)
+                                    {
+                                        <text>Expires: @sub.ExpiresAt.Value.ToString("MMM dd, yyyy")</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Lifetime access</text>
+                                    }
+                                </MudText>
+                            </MudCardContent>
+                            <MudCardActions>
+                                <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                           Href="@($"/content/channel/{sub.ChannelSlug}")">
+                                    View Content
+                                </MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @* Recent Content *@
+        <div class="d-flex justify-space-between align-center mb-4">
+            <MudText Typo="Typo.h5">Recent Content</MudText>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/content">
+                View All
+            </MudButton>
+        </div>
+
+        @if (!recentContent.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No content available yet. Subscribe to channels to access their content.
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var content in recentContent.Take(6))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard Class="content-card" Style="height: 100%;">
+                            @if (!string.IsNullOrEmpty(content.MainPicture))
+                            {
+                                <MudCardMedia Image="@content.MainPicture" Height="120" />
+                            }
+                            <MudCardContent>
+                                <MudText Typo="Typo.subtitle1" Class="mb-1">@content.Title</MudText>
+                                @if (content.ViewCount > 0)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @content.ViewCount views
+                                    </MudText>
+                                }
+                            </MudCardContent>
+                            <MudCardActions>
+                                <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                           Href="@($"/content/{content.Slug}")">
+                                    Read
+                                </MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @* Quick Actions *@
+        <MudPaper Class="pa-4 mt-6" Elevation="0" Style="background: var(--mud-palette-background-grey);">
+            <MudText Typo="Typo.h6" Class="mb-3">Quick Actions</MudText>
+            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Explore" Href="/channels">
+                    Explore Channels
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Article" Href="/content">
+                    Browse Content
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Person" Href="/profile">
+                    My Profile
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.CreditCard" Href="/my-plan">
+                    My Plan
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudContainer>
+}
+
+<style>
+    .content-card {
+        transition: transform 0.2s;
+    }
+    .content-card:hover {
+        transform: translateY(-2px);
+    }
+</style>
+
+@code {
+    private bool loading = true;
+    private string userName = "";
+    private List<UserSubscriptionDto> subscriptions = new();
+    private List<ContentListDto> recentContent = new();
+    private int coursesAccess = 0;
+    private int contentViewed = 0;
+    private int favorites = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if user is Admin/SuperAdmin - redirect to creator dashboard
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.IsInRole("Admin") || user.IsInRole("SuperAdmin"))
+        {
+            Nav.NavigateTo("/creator", replace: true);
+            return;
+        }
+
+        await LoadDashboard();
+    }
+
+    private async Task LoadDashboard()
+    {
+        loading = true;
+
+        try
+        {
+            var currentUser = await Api.GetCurrentUserAsync();
+            userName = currentUser?.Email?.Split('@')[0] ?? "User";
+
+            // Load user's subscriptions
+            subscriptions = await Api.GetMySubscriptionsAsync();
+
+            // Load recent content
+            recentContent = await Api.GetPublishedContentsAsync(take: 6);
+
+            // Calculate stats
+            coursesAccess = subscriptions.Sum(s => s.CoursesCount);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading dashboard: {ex.Message}");
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+}

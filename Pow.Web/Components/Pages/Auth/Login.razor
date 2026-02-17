@@ -1,0 +1,175 @@
+@page "/login"
+@page "/auth/login"
+@using Microsoft.Extensions.Configuration
+@inject ApiService Api
+@inject AuthStateProvider AuthState
+@inject NavigationManager Nav
+@inject IConfiguration Config
+@inject ISnackbar Snackbar
+
+<PageTitle>Login - Pow</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="d-flex justify-center align-center" Style="min-height: calc(100vh - 120px);">
+    <MudCard Elevation="4" Class="pa-4" Style="width: 100%;">
+        <MudCardContent>
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-4">Login</MudText>
+
+            <EditForm Model="model" OnValidSubmit="HandleLogin">
+                <DataAnnotationsValidator />
+
+                <MudTextField T="string" @bind-Value="model.Email" Label="Email" Variant="Variant.Outlined"
+                              InputType="InputType.Email" Required="true" Class="mb-3" />
+
+                <MudTextField T="string" @bind-Value="model.Password" Label="Password" Variant="Variant.Outlined"
+                              InputType="@(_showPassword ? InputType.Text : InputType.Password)" Required="true" Class="mb-4"
+                              Adornment="Adornment.End" AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                              OnAdornmentClick="() => _showPassword = !_showPassword" AdornmentAriaLabel="Mostrar contraseña" />
+
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                           FullWidth="true" Disabled="isLoading" Class="mb-2">
+                    @if (isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Login
+                </MudButton>
+            </EditForm>
+
+            @if (_hasOAuthProviders)
+            {
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mb-3">
+                    Or continue with
+                </MudText>
+
+                <MudStack Row="true" Justify="Justify.Center" Spacing="2">
+                    @if (_hasGitHub)
+                    {
+                        <MudIconButton Icon="@Icons.Custom.Brands.GitHub" Size="Size.Large"
+                                       OnClick="LoginWithGitHub" Title="GitHub" />
+                    }
+                    @if (_hasGoogle)
+                    {
+                        <MudIconButton Icon="@Icons.Custom.Brands.Google" Size="Size.Large"
+                                       OnClick="LoginWithGoogle" Title="Google" />
+                    }
+                    @if (_hasMicrosoft)
+                    {
+                        <MudIconButton Icon="@Icons.Custom.Brands.Microsoft" Size="Size.Large"
+                                       OnClick="LoginWithMicrosoft" Title="Microsoft" />
+                    }
+                    @if (_hasFacebook)
+                    {
+                        <MudIconButton Icon="@Icons.Custom.Brands.Facebook" Size="Size.Large"
+                                       OnClick="LoginWithFacebook" Title="Facebook" />
+                    }
+                    @if (_hasLinkedIn)
+                    {
+                        <MudIconButton Icon="@Icons.Custom.Brands.LinkedIn" Size="Size.Large"
+                                       OnClick="LoginWithLinkedIn" Title="LinkedIn" />
+                    }
+                </MudStack>
+            }
+
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-4">
+                <MudLink Href="/register" Typo="Typo.body2">Create account</MudLink>
+                <MudLink Href="/forgot-password" Typo="Typo.body2">Forgot password?</MudLink>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private LoginModel model = new();
+    private bool isLoading = false;
+    private bool _showPassword = false;
+
+    // OAuth providers
+    private bool _hasGitHub;
+    private bool _hasGoogle;
+    private bool _hasMicrosoft;
+    private bool _hasFacebook;
+    private bool _hasLinkedIn;
+    private bool _hasOAuthProviders => _hasGitHub || _hasGoogle || _hasMicrosoft || _hasFacebook || _hasLinkedIn;
+
+    protected override void OnInitialized()
+    {
+        _hasGitHub = Config.GetSection("GitHub").Exists();
+        _hasGoogle = Config.GetSection("Google").Exists();
+        _hasMicrosoft = Config.GetSection("Microsoft").Exists();
+        _hasFacebook = Config.GetSection("Facebook").Exists();
+        _hasLinkedIn = Config.GetSection("LinkedIn").Exists();
+    }
+
+    private async Task HandleLogin()
+    {
+        isLoading = true;
+
+        try
+        {
+            var result = await Api.LoginAsync(model.Email, model.Password);
+
+            if (result.Success && result.Token != null && result.RefreshToken != null)
+            {
+                await AuthState.LoginAsync(result.Token, result.RefreshToken);
+                Snackbar.Add("Welcome back!", Severity.Success);
+                Nav.NavigateTo("/dashboard");
+            }
+            else
+            {
+                Snackbar.Add(result.Message ?? "Login failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+
+        isLoading = false;
+    }
+
+    private void LoginWithGitHub()
+    {
+        var clientId = Config["GitHub:ClientId"];
+        var redirectUri = Uri.EscapeDataString(Nav.BaseUri + "github-callback");
+        Nav.NavigateTo($"https://github.com/login/oauth/authorize?client_id={clientId}&redirect_uri={redirectUri}&scope=user:email", forceLoad: true);
+    }
+
+    private void LoginWithGoogle()
+    {
+        var clientId = Config["Google:ClientId"];
+        var redirectUri = Uri.EscapeDataString(Nav.BaseUri + "google-callback");
+        var scope = Uri.EscapeDataString("openid email profile");
+        Nav.NavigateTo($"https://accounts.google.com/o/oauth2/v2/auth?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope={scope}", forceLoad: true);
+    }
+
+    private void LoginWithMicrosoft()
+    {
+        var clientId = Config["Microsoft:ClientId"];
+        var tenantId = Config["Microsoft:TenantId"] ?? "common";
+        var redirectUri = Uri.EscapeDataString(Nav.BaseUri + "microsoft-callback");
+        var scope = Uri.EscapeDataString("openid email profile");
+        Nav.NavigateTo($"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/authorize?client_id={clientId}&redirect_uri={redirectUri}&response_type=code&scope={scope}", forceLoad: true);
+    }
+
+    private void LoginWithFacebook()
+    {
+        var appId = Config["Facebook:AppId"];
+        var redirectUri = Uri.EscapeDataString(Nav.BaseUri + "facebook-callback");
+        Nav.NavigateTo($"https://www.facebook.com/v18.0/dialog/oauth?client_id={appId}&redirect_uri={redirectUri}&scope=email,public_profile&response_type=code", forceLoad: true);
+    }
+
+    private void LoginWithLinkedIn()
+    {
+        var clientId = Config["LinkedIn:ClientId"];
+        var redirectUri = Uri.EscapeDataString(Nav.BaseUri + "linkedin-callback");
+        var scope = Uri.EscapeDataString("openid profile email");
+        Nav.NavigateTo($"https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id={clientId}&redirect_uri={redirectUri}&scope={scope}", forceLoad: true);
+    }
+
+    private class LoginModel
+    {
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}

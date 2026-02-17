@@ -1,0 +1,122 @@
+{{## Project: Pow ##}}
+{{## Architecture: Xipe Boilerplate ##}}
+{{## This template was contextualized for this specific project ##}}
+
+// ╔════════════════════════════════════════════════════════════╗
+// ║              USER CODE - SAFE TO EDIT                      ║
+// ║     This decorator wraps the generated base service        ║
+// ║        Add your custom business logic here                 ║
+// ╚════════════════════════════════════════════════════════════╝
+
+using {{ entities_namespace }};
+using {{ dto_namespace }};
+using {{ interfaces_namespace }};
+using {{ services_namespace }};
+
+namespace {{ decorators_namespace }}
+{
+    /// <summary>
+    /// Decorator for {{ entity_name }}Service - Add your custom business logic here.
+    /// Diana will NOT overwrite this file.
+    /// </summary>
+    public class {{ entity_name }}ServiceDecorator : I{{ entity_name }}Service
+    {
+        private readonly {{ entity_name }}Service _inner;
+        private readonly ILogger<{{ entity_name }}ServiceDecorator> _logger;
+
+        public {{ entity_name }}ServiceDecorator(
+            {{ entity_name }}Service inner,
+            ILogger<{{ entity_name }}ServiceDecorator> logger)
+        {
+            _inner = inner;
+            _logger = logger;
+        }
+
+        #region CRUD Methods - Add validation/logging/events as needed
+
+        public virtual async Task<List<{{ entity_name }}OutputDto>> GetAllAsync()
+        {
+            return await _inner.GetAllAsync();
+        }
+
+        public virtual async Task<{{ entity_name }}OutputDto?> GetByIdAsync(Guid id)
+        {
+            return await _inner.GetByIdAsync(id);
+        }
+
+        public virtual async Task<{{ entity_name }}OutputDto> CreateAsync({{ entity_name }}InputDto input)
+        {
+            // TODO: Add validation logic here
+            // Example:
+            // if (string.IsNullOrEmpty(input.Name))
+            //     throw new ValidationException("Name is required");
+
+            var result = await _inner.CreateAsync(input);
+
+            // TODO: Add post-creation logic (events, notifications, etc.)
+            _logger.LogInformation("{{ entity_name }} created: {Id}", result.Id);
+
+            return result;
+        }
+
+        public virtual async Task<{{ entity_name }}OutputDto?> UpdateAsync(Guid id, {{ entity_name }}InputDto input)
+        {
+            // TODO: Add validation logic here
+
+            var result = await _inner.UpdateAsync(id, input);
+
+            if (result != null)
+            {
+                _logger.LogInformation("{{ entity_name }} updated: {Id}", id);
+            }
+
+            return result;
+        }
+
+        public virtual async Task<bool> DeleteAsync(Guid id)
+        {
+            // TODO: Add pre-deletion checks here
+            // Example: Check if entity can be deleted
+
+            var result = await _inner.DeleteAsync(id);
+
+            if (result)
+            {
+                _logger.LogInformation("{{ entity_name }} deleted: {Id}", id);
+            }
+
+            return result;
+        }
+
+        public virtual async Task<int> CountAsync()
+        {
+            return await _inner.CountAsync();
+        }
+
+        #endregion
+{{ for entity in unique_has_many }}
+
+        public virtual async Task<List<{{ entity.related_entity }}>> Get{{ entity.related_entity }}sAsync(Guid {{ entity_name_lower }}Id)
+        {
+            return await _inner.Get{{ entity.related_entity }}sAsync({{ entity_name_lower }}Id);
+        }
+{{ end }}
+
+        #region Custom Methods - Add your business logic here
+
+        // Example custom method:
+        //
+        // public async Task<{{ entity_name }}OutputDto> ActivateAsync(Guid id)
+        // {
+        //     var entity = await GetByIdAsync(id);
+        //     if (entity == null)
+        //         throw new NotFoundException("{{ entity_name }} not found");
+        //     
+        //     // Your custom business logic here
+        //     
+        //     return await UpdateAsync(id, new {{ entity_name }}InputDto { ... });
+        // }
+
+        #endregion
+    }
+}

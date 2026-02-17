@@ -1,0 +1,260 @@
+@page "/creator/channels/{ChannelId:guid}/forms/{FormId:guid}/responses"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Responses - @(form?.Title ?? "Loading...")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (form == null)
+    {
+        <MudAlert Severity="Severity.Error">Form not found</MudAlert>
+    }
+    else
+    {
+        <div class="d-flex justify-space-between align-center mb-6">
+            <div>
+                <MudText Typo="Typo.h4">@form.Title - Responses</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @responses.Count total responses
+                </MudText>
+            </div>
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Assessment"
+                           OnClick="ShowStats">
+                    View Stats
+                </MudButton>
+                <MudButton Variant="Variant.Text"
+                           Href="@($"/creator/channels/{ChannelId}/forms/{FormId}")">
+                    Edit Form
+                </MudButton>
+            </MudStack>
+        </div>
+
+        @if (!responses.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No responses yet. Share your form to start collecting responses!
+            </MudAlert>
+        }
+        else
+        {
+            <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
+                <MudTabPanel Text="All Responses">
+                    <MudTable Items="@responses" Hover="true" Elevation="0" Dense="true">
+                        <HeaderContent>
+                            <MudTh>User</MudTh>
+                            <MudTh>Status</MudTh>
+                            @if (form.FormType == FormType.Quiz)
+                            {
+                                <MudTh>Score</MudTh>
+                                <MudTh>Result</MudTh>
+                            }
+                            <MudTh>Submitted</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="User">@context.UserEmail</MudTd>
+                            <MudTd DataLabel="Status">
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(context.Status == FormResponseStatus.Completed ? Color.Success : Color.Warning)">
+                                    @context.Status
+                                </MudChip>
+                            </MudTd>
+                            @if (form.FormType == FormType.Quiz)
+                            {
+                                <MudTd DataLabel="Score">
+                                    @if (context.Score.HasValue && context.MaxScore.HasValue && context.MaxScore > 0)
+                                    {
+                                        var percentage = (double)context.Score.Value / context.MaxScore.Value * 100;
+                                        <MudText>@context.Score / @context.MaxScore (@percentage.ToString("F0")%)</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText>-</MudText>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Result">
+                                    @if (context.Passed.HasValue)
+                                    {
+                                        <MudChip T="string" Size="Size.Small"
+                                                 Color="@(context.Passed.Value ? Color.Success : Color.Error)">
+                                            @(context.Passed.Value ? "Passed" : "Failed")
+                                        </MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudText>-</MudText>
+                                    }
+                                </MudTd>
+                            }
+                            <MudTd DataLabel="Submitted">
+                                @if (context.CompletedAt.HasValue)
+                                {
+                                    @context.CompletedAt.Value.ToString("MMM dd, yyyy HH:mm")
+                                }
+                                else
+                                {
+                                    <MudText Class="mud-text-secondary">In Progress</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Actions">
+                                <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                               Size="Size.Small"
+                                               OnClick="@(() => ViewResponse(context))" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudTabPanel>
+
+                @if (form.FormType == FormType.Quiz)
+                {
+                    <MudTabPanel Text="Passed" BadgeData="@responses.Count(r => r.Passed == true)" BadgeColor="Color.Success">
+                        <MudTable Items="@responses.Where(r => r.Passed == true)" Hover="true" Elevation="0" Dense="true">
+                            <HeaderContent>
+                                <MudTh>User</MudTh>
+                                <MudTh>Score</MudTh>
+                                <MudTh>Submitted</MudTh>
+                                <MudTh>Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>@context.UserEmail</MudTd>
+                                <MudTd>
+                                    @if (context.Score.HasValue && context.MaxScore.HasValue && context.MaxScore > 0)
+                                    {
+                                        var percentage = (double)context.Score.Value / context.MaxScore.Value * 100;
+                                        <MudText>@context.Score / @context.MaxScore (@percentage.ToString("F0")%)</MudText>
+                                    }
+                                </MudTd>
+                                <MudTd>@context.CompletedAt?.ToString("MMM dd, yyyy HH:mm")</MudTd>
+                                <MudTd>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => ViewResponse(context))" />
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </MudTabPanel>
+
+                    <MudTabPanel Text="Failed" BadgeData="@responses.Count(r => r.Passed == false)" BadgeColor="Color.Error">
+                        <MudTable Items="@responses.Where(r => r.Passed == false)" Hover="true" Elevation="0" Dense="true">
+                            <HeaderContent>
+                                <MudTh>User</MudTh>
+                                <MudTh>Score</MudTh>
+                                <MudTh>Submitted</MudTh>
+                                <MudTh>Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>@context.UserEmail</MudTd>
+                                <MudTd>
+                                    @if (context.Score.HasValue && context.MaxScore.HasValue && context.MaxScore > 0)
+                                    {
+                                        var percentage = (double)context.Score.Value / context.MaxScore.Value * 100;
+                                        <MudText>@context.Score / @context.MaxScore (@percentage.ToString("F0")%)</MudText>
+                                    }
+                                </MudTd>
+                                <MudTd>@context.CompletedAt?.ToString("MMM dd, yyyy HH:mm")</MudTd>
+                                <MudTd>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => ViewResponse(context))" />
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </MudTabPanel>
+                }
+            </MudTabs>
+        }
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid ChannelId { get; set; }
+
+    [Parameter]
+    public Guid FormId { get; set; }
+
+    private FormDetailDto? form;
+    private List<FormResponseDto> responses = new();
+    private List<BreadcrumbItem> breadcrumbs = new();
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+
+        form = await Api.GetFormAsync(FormId);
+        responses = await Api.GetFormResponsesAsync(FormId);
+
+        BuildBreadcrumbs();
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Creator", "/creator"),
+            new("Forms", $"/creator/channels/{ChannelId}/forms"),
+            new(form?.Title ?? "Form", $"/creator/channels/{ChannelId}/forms/{FormId}"),
+            new("Responses", null, disabled: true)
+        };
+    }
+
+    private async Task ViewResponse(FormResponseDto response)
+    {
+        var detail = await Api.GetFormResponseDetailAsync(response.Id);
+        if (detail == null)
+        {
+            Snackbar.Add("Failed to load response", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            { "Response", detail },
+            { "IsQuiz", form?.FormType == FormType.Quiz }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<ResponseDetailDialog>("Response Details", parameters, options);
+    }
+
+    private async Task ShowStats()
+    {
+        var stats = await Api.GetFormStatsAsync(FormId);
+        if (stats == null)
+        {
+            Snackbar.Add("Failed to load stats", Severity.Error);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            { "Stats", stats }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<StatsDialog>("Form Statistics", parameters, options);
+    }
+}

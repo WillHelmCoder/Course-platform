@@ -1,0 +1,488 @@
+@page "/creator/channels"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+
+<PageTitle>My Channels</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <div class="d-flex justify-space-between align-center mb-6">
+        <MudText Typo="Typo.h4">My Channels</MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            Create Channel
+        </MudButton>
+    </div>
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!channels.Any())
+    {
+        <MudPaper Class="pa-8 text-center" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Large" Color="Color.Primary" Class="mb-4" Style="font-size: 4rem;" />
+            <MudText Typo="Typo.h5" Class="mb-2">No channels yet</MudText>
+            <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+                Create your first channel to start publishing content.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">
+                Create Your First Channel
+            </MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var channel in channels)
+            {
+                <MudItem xs="12" md="6">
+                    <MudCard Elevation="3">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <div class="d-flex justify-space-between align-center">
+                                    <MudText Typo="Typo.h5">@channel.Name</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@(channel.IsActive ? Color.Success : Color.Default)">
+                                        @(channel.IsActive ? "Active" : "Inactive")
+                                    </MudChip>
+                                </div>
+                            </CardHeaderContent>
+                            <CardHeaderActions>
+                                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
+                                    <MudMenuItem OnClick="() => OpenEditDialog(channel)">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                                            <span>Edit</span>
+                                        </MudStack>
+                                    </MudMenuItem>
+                                    <MudMenuItem OnClick="() => OpenDeleteDialog(channel)">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudIcon Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" />
+                                            <span style="color: var(--mud-palette-error);">Delete</span>
+                                        </MudStack>
+                                    </MudMenuItem>
+                                </MudMenu>
+                            </CardHeaderActions>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            @if (!string.IsNullOrEmpty(channel.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                                    @channel.Description
+                                </MudText>
+                            }
+
+                            <MudGrid>
+                                <MudItem xs="4">
+                                    <div class="text-center">
+                                        <MudText Typo="Typo.h5" Color="Color.Primary">@channel.CourseCount</MudText>
+                                        <MudText Typo="Typo.caption">Courses</MudText>
+                                    </div>
+                                </MudItem>
+                                <MudItem xs="4">
+                                    <div class="text-center">
+                                        <MudText Typo="Typo.h5" Color="Color.Secondary">@channel.ContentCount</MudText>
+                                        <MudText Typo="Typo.caption">Content</MudText>
+                                    </div>
+                                </MudItem>
+                                <MudItem xs="4">
+                                    <div class="text-center">
+                                        <MudText Typo="Typo.h5" Color="Color.Tertiary">@(subscriberCounts.GetValueOrDefault(channel.Id, 0))</MudText>
+                                        <MudText Typo="Typo.caption">Subscribers</MudText>
+                                    </div>
+                                </MudItem>
+                            </MudGrid>
+                        </MudCardContent>
+                        <MudDivider />
+                        <MudCardActions Class="pa-4">
+                            <MudGrid Spacing="2">
+                                <MudItem xs="6" sm="4">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               FullWidth="true"
+                                               Href="@($"/creator/courses?channelId={channel.Id}")"
+                                               StartIcon="@Icons.Material.Filled.School">
+                                        Courses
+                                    </MudButton>
+                                </MudItem>
+                                <MudItem xs="6" sm="4">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Info"
+                                               FullWidth="true"
+                                               Href="@($"/creator/channels/{channel.Id}/forms")"
+                                               StartIcon="@Icons.Material.Filled.Quiz">
+                                        Forms
+                                    </MudButton>
+                                </MudItem>
+                                <MudItem xs="6" sm="4">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Secondary"
+                                               FullWidth="true"
+                                               Href="@($"/creator/channels/{channel.Id}/events")"
+                                               StartIcon="@Icons.Material.Filled.Event">
+                                        Events
+                                    </MudButton>
+                                </MudItem>
+                                <MudItem xs="6" sm="4">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Tertiary"
+                                               FullWidth="true"
+                                               Href="@($"/creator/channels/{channel.Id}/plans")"
+                                               StartIcon="@Icons.Material.Filled.CreditCard">
+                                        Plans
+                                    </MudButton>
+                                </MudItem>
+                                <MudItem xs="6" sm="4">
+                                    <MudButton Variant="Variant.Outlined"
+                                               FullWidth="true"
+                                               Href="@($"/creator/channels/{channel.Id}/subscribers")"
+                                               StartIcon="@Icons.Material.Filled.People">
+                                        Subscribers
+                                    </MudButton>
+                                </MudItem>
+                                <MudItem xs="6" sm="4">
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Info"
+                                               FullWidth="true"
+                                               Href="@($"/content/channel/{channel.Slug}")"
+                                               Target="_blank"
+                                               StartIcon="@Icons.Material.Filled.Visibility">
+                                        View
+                                    </MudButton>
+                                </MudItem>
+                            </MudGrid>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+@* Create Channel Dialog *@
+<MudDialog @bind-Visible="showCreateDialog" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
+            Create New Channel
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="newChannelName"
+                      Label="Channel Name"
+                      Variant="Variant.Outlined"
+                      Required="true"
+                      RequiredError="Channel name is required"
+                      Class="mb-4"
+                      Immediate="true" />
+        <MudTextField @bind-Value="newChannelDescription"
+                      Label="Description"
+                      Variant="Variant.Outlined"
+                      Lines="3"
+                      Placeholder="Describe what your channel is about..." />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseCreateDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="CreateChannel"
+                   Disabled="@(string.IsNullOrWhiteSpace(newChannelName) || creating)">
+            @if (creating)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Edit Channel Dialog *@
+<MudDialog @bind-Visible="showEditDialog" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Edit Channel</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="editChannelName"
+                          Label="Channel Name"
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          Immediate="true" />
+            <MudTextField @bind-Value="editChannelDescription"
+                          Label="Description"
+                          Variant="Variant.Outlined"
+                          Lines="3" />
+
+            <MudDivider Class="my-2" />
+
+            <MudText Typo="Typo.subtitle2">Inbox</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                Who can send you messages through this channel
+            </MudText>
+            <MudRadioGroup @bind-Value="editInboxVisibility">
+                <MudRadio Value="InboxVisibility.Disabled" Color="Color.Primary" Dense="true">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">Disabled</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">No one can message you</MudText>
+                    </MudStack>
+                </MudRadio>
+                <MudRadio Value="InboxVisibility.SubscribersOnly" Color="Color.Primary" Dense="true">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">Subscribers only</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Only your subscribers can message you</MudText>
+                    </MudStack>
+                </MudRadio>
+                <MudRadio Value="InboxVisibility.Everyone" Color="Color.Primary" Dense="true">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">Everyone</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Anyone can message you</MudText>
+                    </MudStack>
+                </MudRadio>
+            </MudRadioGroup>
+
+            <MudDivider Class="my-2" />
+
+            <MudSwitch @bind-Value="editChannelActive"
+                       Label="Channel Active"
+                       Color="Color.Success" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => showEditDialog = false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="UpdateChannel"
+                   Disabled="@(string.IsNullOrWhiteSpace(editChannelName) || saving)">
+            @if (saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Delete Channel Dialog *@
+<MudDialog @bind-Visible="showDeleteDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Color="Color.Error">Delete Channel</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            This will permanently delete the channel and all its content.
+        </MudAlert>
+        <MudText Class="mb-4">
+            Are you sure you want to delete <strong>@channelToDelete?.Name</strong>?
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            This includes all courses, chapters, and content within this channel.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => showDeleteDialog = false">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Error"
+                   OnClick="DeleteChannel"
+                   Disabled="deleting">
+            @if (deleting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Delete
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@inject ISnackbar Snackbar
+
+@code {
+    private List<ChannelDto> channels = new();
+    private Dictionary<Guid, int> subscriberCounts = new();
+    private bool loading = true;
+
+    // Create dialog
+    private bool showCreateDialog = false;
+    private bool creating = false;
+    private string newChannelName = "";
+    private string newChannelDescription = "";
+    private DialogOptions dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    // Edit dialog
+    private bool showEditDialog = false;
+    private bool saving = false;
+    private ChannelDto? channelToEdit;
+    private string editChannelName = "";
+    private string editChannelDescription = "";
+    private bool editChannelActive = true;
+    private InboxVisibility editInboxVisibility = InboxVisibility.Disabled;
+
+    // Delete dialog
+    private bool showDeleteDialog = false;
+    private bool deleting = false;
+    private ChannelDto? channelToDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadChannels();
+    }
+
+    private async Task LoadChannels()
+    {
+        loading = true;
+        channels = await Api.GetMyChannelsAsync();
+
+        // Load subscriber counts for each channel
+        subscriberCounts.Clear();
+        foreach (var channel in channels)
+        {
+            var subscribers = await Api.GetChannelSubscribersAsync(channel.Id);
+            subscriberCounts[channel.Id] = subscribers.Count;
+        }
+
+        loading = false;
+    }
+
+    private void OpenCreateDialog()
+    {
+        newChannelName = "";
+        newChannelDescription = "";
+        showCreateDialog = true;
+    }
+
+    private void CloseCreateDialog()
+    {
+        showCreateDialog = false;
+    }
+
+    private async Task CreateChannel()
+    {
+        if (string.IsNullOrWhiteSpace(newChannelName))
+            return;
+
+        creating = true;
+        try
+        {
+            var dto = new CreateChannelDto(newChannelName.Trim(), newChannelDescription?.Trim());
+            var result = await Api.CreateChannelAsync(dto);
+
+            if (result != null)
+            {
+                Snackbar.Add($"Channel '{result.Name}' created!", Severity.Success);
+                showCreateDialog = false;
+                await LoadChannels();
+            }
+            else
+            {
+                Snackbar.Add("Failed to create channel", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            creating = false;
+        }
+    }
+
+    private void OpenEditDialog(ChannelDto channel)
+    {
+        channelToEdit = channel;
+        editChannelName = channel.Name;
+        editChannelDescription = channel.Description ?? "";
+        editChannelActive = channel.IsActive;
+        editInboxVisibility = channel.InboxVisibility;
+        showEditDialog = true;
+    }
+
+    private async Task UpdateChannel()
+    {
+        if (channelToEdit == null || string.IsNullOrWhiteSpace(editChannelName))
+            return;
+
+        saving = true;
+        try
+        {
+            var dto = new UpdateChannelDto(
+                editChannelName.Trim(),
+                editChannelDescription?.Trim(),
+                editChannelActive,
+                channelToEdit.SortOrder
+            );
+
+            var result = await Api.UpdateMyChannelAsync(channelToEdit.Id, dto);
+
+            // Also update inbox visibility if changed
+            if (editInboxVisibility != channelToEdit.InboxVisibility)
+            {
+                await Api.UpdateChannelSettingsAsync(channelToEdit.Id, new UpdateChannelSettingsDto(editInboxVisibility));
+            }
+
+            if (result != null)
+            {
+                Snackbar.Add("Channel updated!", Severity.Success);
+                showEditDialog = false;
+                await LoadChannels();
+            }
+            else
+            {
+                Snackbar.Add("Failed to update channel", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private void OpenDeleteDialog(ChannelDto channel)
+    {
+        channelToDelete = channel;
+        showDeleteDialog = true;
+    }
+
+    private async Task DeleteChannel()
+    {
+        if (channelToDelete == null)
+            return;
+
+        deleting = true;
+        try
+        {
+            var (success, error) = await Api.DeleteMyChannelAsync(channelToDelete.Id);
+
+            if (success)
+            {
+                Snackbar.Add("Channel deleted!", Severity.Success);
+                showDeleteDialog = false;
+                await LoadChannels();
+            }
+            else
+            {
+                Snackbar.Add(error ?? "Failed to delete channel", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            deleting = false;
+        }
+    }
+}

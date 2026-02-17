@@ -1,0 +1,409 @@
+@page "/register/creator"
+@using Pow.Domain.DTOs
+@inject ApiService Api
+@inject AuthStateProvider AuthState
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Become a Creator - Pow</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-2">Become a Creator</MudText>
+    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary" Class="mb-6">
+        Create your account and choose a plan to start building your channel.
+    </MudText>
+
+    <MudStepper @bind-ActiveIndex="activeStep" Linear="true" Color="Color.Primary" Class="mb-6"
+                HeaderNavigation="false">
+        <MudStep Title="Account" Icon="@Icons.Material.Filled.Person">
+            <ChildContent>
+                <MudCard Class="pa-4">
+                    <MudCardContent>
+                        <MudTextField T="string" @bind-Value="model.Email" Label="Email" Variant="Variant.Outlined"
+                                      InputType="InputType.Email" Required="true" Class="mb-3"
+                                      Error="@_emailError" ErrorText="@_emailErrorText"
+                                      OnBlur="ValidateEmail" />
+
+                        <MudTextField T="string" @bind-Value="model.Password" Label="Password" Variant="Variant.Outlined"
+                                      InputType="@(_showPassword ? InputType.Text : InputType.Password)" Required="true" Class="mb-3"
+                                      HelperText="At least 6 characters"
+                                      Adornment="Adornment.End" AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      OnAdornmentClick="() => _showPassword = !_showPassword" AdornmentAriaLabel="Mostrar contraseña" />
+
+                        <MudTextField T="string" @bind-Value="model.ConfirmPassword" Label="Confirm Password" Variant="Variant.Outlined"
+                                      InputType="@(_showConfirmPassword ? InputType.Text : InputType.Password)" Required="true" Class="mb-4"
+                                      Adornment="Adornment.End" AdornmentIcon="@(_showConfirmPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      OnAdornmentClick="() => _showConfirmPassword = !_showConfirmPassword" AdornmentAriaLabel="Mostrar contraseña" />
+
+                        <MudTextField T="string" @bind-Value="model.ChannelName" Label="Channel Name" Variant="Variant.Outlined"
+                                      Required="true" Class="mb-3"
+                                      HelperText="This will be your channel's display name" />
+                    </MudCardContent>
+                    <MudCardActions Class="justify-end">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ValidateStep1"
+                                   Disabled="@_validatingEmail">
+                            @if (_validatingEmail)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Next: Choose Plan
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </ChildContent>
+        </MudStep>
+
+        <MudStep Title="Platform Plan" Icon="@Icons.Material.Filled.CreditCard">
+            <ChildContent>
+                @if (loadingPlans)
+                {
+                    <MudProgressLinear Indeterminate="true" />
+                }
+                else if (platformPlans.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info">No plans available. Contact support.</MudAlert>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Class="mb-4">
+                        Choose the plan that fits your needs. You can upgrade anytime.
+                    </MudText>
+
+                    <MudGrid Spacing="4">
+                        @foreach (var plan in platformPlans)
+                        {
+                            <MudItem xs="12" md="4">
+                                <MudCard Elevation="@(selectedPlanId == plan.Id ? 8 : 2)"
+                                         Class="@GetPlanCardClass(plan)"
+                                         Style="height: 100%; cursor: pointer;"
+                                         @onclick="() => selectedPlanId = plan.Id">
+                                    @if (plan.IsRecommended)
+                                    {
+                                        <MudChip T="string" Color="Color.Primary" Size="Size.Small"
+                                                 Style="position: absolute; top: -10px; right: 16px;">
+                                            Recommended
+                                        </MudChip>
+                                    }
+                                    <MudCardHeader>
+                                        <CardHeaderContent>
+                                            <MudText Typo="Typo.h5" Align="Align.Center">@plan.Name</MudText>
+                                        </CardHeaderContent>
+                                    </MudCardHeader>
+                                    <MudCardContent>
+                                        <div class="text-center mb-4">
+                                            @if (plan.Price == 0)
+                                            {
+                                                <MudText Typo="Typo.h3" Color="Color.Primary">Free</MudText>
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.h3" Color="Color.Primary">
+                                                    @plan.Currency @plan.Price.ToString("N2")
+                                                </MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    /@plan.Interval
+                                                </MudText>
+                                            }
+                                        </div>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                                            @plan.Description
+                                        </MudText>
+                                        <MudList T="string" Dense="true">
+                                            @foreach (var feature in plan.Features)
+                                            {
+                                                <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                                                    @feature
+                                                </MudListItem>
+                                            }
+                                        </MudList>
+                                    </MudCardContent>
+                                </MudCard>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+
+                <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-6">
+                    <MudButton Variant="Variant.Text" OnClick="() => activeStep = 0">
+                        Back
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ValidateStep2"
+                               Disabled="selectedPlanId == null">
+                        Next: Confirm
+                    </MudButton>
+                </MudStack>
+            </ChildContent>
+        </MudStep>
+
+        <MudStep Title="Confirm" Icon="@Icons.Material.Filled.CheckCircle">
+            <ChildContent>
+                <MudCard Class="pa-4">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" Class="mb-4">Review Your Details</MudText>
+
+                        <MudSimpleTable Dense="true" Hover="true" Class="mb-4">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Email</strong></td>
+                                    <td>@model.Email</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Channel Name</strong></td>
+                                    <td>@model.ChannelName</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Selected Plan</strong></td>
+                                    <td>
+                                        @if (selectedPlan != null)
+                                        {
+                                            <span>@selectedPlan.Name - @(selectedPlan.Price == 0 ? "Free" : $"{selectedPlan.Currency} {selectedPlan.Price:N2}/{selectedPlan.Interval}")</span>
+                                        }
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </MudSimpleTable>
+
+                        <MudAlert Severity="Severity.Info" Class="mb-4">
+                            By creating an account, you agree to our Terms of Service and Privacy Policy.
+                        </MudAlert>
+                    </MudCardContent>
+                    <MudCardActions Class="justify-space-between">
+                        <MudButton Variant="Variant.Text" OnClick="() => activeStep = 1">
+                            Back
+                        </MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="HandleRegister"
+                                   Disabled="isLoading">
+                            @if (isLoading)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Create Account
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </ChildContent>
+        </MudStep>
+    </MudStepper>
+
+    <MudText Typo="Typo.body2" Align="Align.Center" Class="mt-4">
+        Already have an account? <MudLink Href="/login">Login here</MudLink>
+    </MudText>
+</MudContainer>
+
+<style>
+    .selected-plan {
+        border: 3px solid var(--mud-palette-primary) !important;
+    }
+    .recommended-plan {
+        position: relative;
+    }
+</style>
+
+@code {
+    private int activeStep = 0;
+    private CreatorRegistrationModel model = new();
+    private List<PlanDto> platformPlans = new();
+    private Guid? selectedPlanId;
+    private PlanDto? selectedPlan => platformPlans.FirstOrDefault(p => p.Id == selectedPlanId);
+    private bool loadingPlans = true;
+    private bool isLoading = false;
+    private bool _showPassword = false;
+    private bool _showConfirmPassword = false;
+    private bool _validatingEmail = false;
+    private bool _emailError = false;
+    private string _emailErrorText = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPlans();
+    }
+
+    private async Task LoadPlans()
+    {
+        loadingPlans = true;
+        try
+        {
+            platformPlans = await Api.GetPlansAsync();
+            // Auto-select recommended plan or first one
+            var recommended = platformPlans.FirstOrDefault(p => p.IsRecommended);
+            selectedPlanId = recommended?.Id ?? platformPlans.FirstOrDefault()?.Id;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading plans: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loadingPlans = false;
+        }
+    }
+
+    private string GetPlanCardClass(PlanDto plan)
+    {
+        var classes = new List<string>();
+        if (selectedPlanId == plan.Id) classes.Add("selected-plan");
+        if (plan.IsRecommended) classes.Add("recommended-plan");
+        return string.Join(" ", classes);
+    }
+
+    private async Task ValidateEmail()
+    {
+        if (string.IsNullOrWhiteSpace(model.Email))
+        {
+            _emailError = false;
+            _emailErrorText = "";
+            return;
+        }
+
+        _validatingEmail = true;
+        try
+        {
+            var exists = await Api.CheckEmailExistsAsync(model.Email);
+            if (exists)
+            {
+                _emailError = true;
+                _emailErrorText = "Este correo ya está registrado";
+            }
+            else
+            {
+                _emailError = false;
+                _emailErrorText = "";
+            }
+        }
+        catch
+        {
+            _emailError = false;
+            _emailErrorText = "";
+        }
+        finally
+        {
+            _validatingEmail = false;
+        }
+    }
+
+    private async Task ValidateStep1()
+    {
+        if (string.IsNullOrWhiteSpace(model.Email))
+        {
+            Snackbar.Add("Email is required", Severity.Warning);
+            return;
+        }
+
+        // Validate email doesn't exist
+        _validatingEmail = true;
+        try
+        {
+            var exists = await Api.CheckEmailExistsAsync(model.Email);
+            if (exists)
+            {
+                _emailError = true;
+                _emailErrorText = "Este correo ya está registrado";
+                Snackbar.Add("Este correo ya está registrado", Severity.Warning);
+                return;
+            }
+        }
+        finally
+        {
+            _validatingEmail = false;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Password) || model.Password.Length < 6)
+        {
+            Snackbar.Add("Password must be at least 6 characters", Severity.Warning);
+            return;
+        }
+
+        if (model.Password != model.ConfirmPassword)
+        {
+            Snackbar.Add("Passwords do not match", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(model.ChannelName))
+        {
+            Snackbar.Add("Channel name is required", Severity.Warning);
+            return;
+        }
+
+        activeStep = 1;
+    }
+
+    private void ValidateStep2()
+    {
+        if (selectedPlanId == null)
+        {
+            Snackbar.Add("Please select a plan", Severity.Warning);
+            return;
+        }
+
+        activeStep = 2;
+    }
+
+    private async Task HandleRegister()
+    {
+        isLoading = true;
+
+        try
+        {
+            var plan = selectedPlan;
+            var isPaidPlan = plan != null && plan.Price > 0;
+
+            // Register as creator (Admin role)
+            // For paid plans, pass null as planId - we'll assign it after payment
+            var result = await Api.RegisterCreatorAsync(
+                model.Email,
+                model.Password,
+                model.ChannelName,
+                isPaidPlan ? null : selectedPlanId!.Value);
+
+            if (result.Success && result.Token != null && result.RefreshToken != null)
+            {
+                await AuthState.LoginAsync(result.Token, result.RefreshToken);
+
+                if (isPaidPlan)
+                {
+                    // Redirect to Stripe checkout for paid plans
+                    var baseUrl = Nav.BaseUri.TrimEnd('/');
+                    var successUrl = $"{baseUrl}/subscription/success";
+                    var cancelUrl = $"{baseUrl}/creator";
+
+                    var session = await Api.CreatePlatformCheckoutSessionAsync(selectedPlanId!.Value, successUrl, cancelUrl);
+
+                    if (session != null)
+                    {
+                        Snackbar.Add("Redirecting to payment...", Severity.Info);
+                        Nav.NavigateTo(session.Url, forceLoad: true);
+                    }
+                    else
+                    {
+                        Snackbar.Add("Account created! Please select a plan from your dashboard.", Severity.Warning);
+                        Nav.NavigateTo("/creator");
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Welcome! Your creator account is ready.", Severity.Success);
+                    Nav.NavigateTo("/creator");
+                }
+            }
+            else
+            {
+                Snackbar.Add(result.Message ?? "Registration failed", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+
+        isLoading = false;
+    }
+
+    private class CreatorRegistrationModel
+    {
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string ConfirmPassword { get; set; } = "";
+        public string ChannelName { get; set; } = "";
+    }
+}

@@ -1,0 +1,142 @@
+@using MudBlazor
+@using Pow.Domain.DTOs
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(IsNew ? "New Plan" : "Edit Plan")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField T="string" @bind-Value="_name" Label="Name" Required="true" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="string" @bind-Value="_interval" Label="Interval">
+                    <MudSelectItem T="string" Value="@("free")">Free</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("monthly")">Monthly</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("yearly")">Yearly</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("lifetime")">Lifetime</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField T="string" @bind-Value="_description" Label="Description" Lines="2" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="decimal" @bind-Value="_price" Label="Price" Min="0" Format="N2"
+                                 Disabled="@(_interval == "free")" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="string" @bind-Value="_currency" Label="Currency">
+                    <MudSelectItem T="string" Value="@("USD")">USD</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("EUR")">EUR</MudSelectItem>
+                    <MudSelectItem T="string" Value="@("MXN")">MXN</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField T="int" @bind-Value="_maxUsers" Label="Max Users" Min="0"
+                                 HelperText="0 = Unlimited" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField T="string" @bind-Value="_features" Label="Features" HelperText="One per line" Lines="4" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="int" @bind-Value="_sortOrder" Label="Display Order" Min="0" />
+            </MudItem>
+            <MudItem xs="12" sm="6" Class="d-flex align-center">
+                <MudCheckBox T="bool" @bind-Value="_isRecommended" Label="Recommended" Color="Color.Primary" />
+            </MudItem>
+            @if (!IsNew)
+            {
+                <MudItem xs="12">
+                    <MudCheckBox T="bool" @bind-Value="_isActive" Label="Active" Color="Color.Success" />
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public PlanDto? Plan { get; set; }
+    [Parameter] public bool IsNew { get; set; }
+
+    private string _name = "";
+    private string? _description;
+    private decimal _price;
+    private string _currency = "USD";
+    private string _interval = "monthly";
+    private string _features = "";
+    private int _maxUsers;
+    private int _sortOrder;
+    private bool _isRecommended;
+    private bool _isActive = true;
+    private bool _saving;
+
+    protected override void OnInitialized()
+    {
+        if (Plan != null)
+        {
+            _name = Plan.Name;
+            _description = Plan.Description;
+            _price = Plan.Price;
+            _currency = Plan.Currency;
+            _interval = Plan.Interval;
+            _features = string.Join("\n", Plan.Features);
+            _maxUsers = Plan.MaxUsers;
+            _isRecommended = Plan.IsRecommended;
+            _isActive = true;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            Snackbar.Add("Name is required", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var features = _features.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList();
+            var actualPrice = _interval == "free" ? 0 : _price;
+
+            if (IsNew)
+            {
+                var dto = new CreatePlanDto(_name, _description, actualPrice, _currency, _interval,
+                    features, _maxUsers, _isRecommended);
+                await Api.CreatePlanAsync(dto);
+                Snackbar.Add("Plan created", Severity.Success);
+            }
+            else
+            {
+                var dto = new UpdatePlanDto(_name, _description, actualPrice, _currency, _interval,
+                    features, _maxUsers, _isActive, _isRecommended, _sortOrder);
+                await Api.UpdatePlanAsync(Plan!.Id, dto);
+                Snackbar.Add("Plan updated", Severity.Success);
+            }
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

@@ -1,0 +1,89 @@
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="share-buttons d-flex gap-2 align-center">
+    @if (ShowLabel)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary mr-2">Share:</MudText>
+    }
+
+    <MudIconButton Icon="@Icons.Custom.Brands.Twitter"
+                   Size="Size.Small"
+                   Color="Color.Default"
+                   OnClick="ShareTwitter"
+                   Title="Share on Twitter" />
+
+    <MudIconButton Icon="@Icons.Custom.Brands.Facebook"
+                   Size="Size.Small"
+                   Color="Color.Default"
+                   OnClick="ShareFacebook"
+                   Title="Share on Facebook" />
+
+    <MudIconButton Icon="@Icons.Custom.Brands.LinkedIn"
+                   Size="Size.Small"
+                   Color="Color.Default"
+                   OnClick="ShareLinkedIn"
+                   Title="Share on LinkedIn" />
+
+    <MudIconButton Icon="@Icons.Material.Filled.Email"
+                   Size="Size.Small"
+                   Color="Color.Default"
+                   OnClick="ShareEmail"
+                   Title="Share via Email" />
+
+    <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                   Size="Size.Small"
+                   Color="Color.Default"
+                   OnClick="CopyLink"
+                   Title="Copy Link" />
+</div>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "";
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter]
+    public bool ShowLabel { get; set; } = true;
+
+    private string CurrentUrl => Navigation.Uri;
+
+    private async Task ShareTwitter()
+    {
+        var text = System.Net.WebUtility.UrlEncode(Title);
+        var url = System.Net.WebUtility.UrlEncode(CurrentUrl);
+        await OpenWindow($"https://twitter.com/intent/tweet?text={text}&url={url}");
+    }
+
+    private async Task ShareFacebook()
+    {
+        var url = System.Net.WebUtility.UrlEncode(CurrentUrl);
+        await OpenWindow($"https://www.facebook.com/sharer/sharer.php?u={url}");
+    }
+
+    private async Task ShareLinkedIn()
+    {
+        var url = System.Net.WebUtility.UrlEncode(CurrentUrl);
+        var title = System.Net.WebUtility.UrlEncode(Title);
+        await OpenWindow($"https://www.linkedin.com/shareArticle?mini=true&url={url}&title={title}");
+    }
+
+    private async Task ShareEmail()
+    {
+        var subject = System.Net.WebUtility.UrlEncode(Title);
+        var body = System.Net.WebUtility.UrlEncode($"{Description}\n\n{CurrentUrl}");
+        await OpenWindow($"mailto:?subject={subject}&body={body}");
+    }
+
+    private async Task CopyLink()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", CurrentUrl);
+    }
+
+    private async Task OpenWindow(string url)
+    {
+        await JS.InvokeVoidAsync("window.open", url, "_blank", "width=600,height=400");
+    }
+}

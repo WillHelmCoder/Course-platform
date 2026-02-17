@@ -1,0 +1,1144 @@
+@page "/creator/chapters/{ChapterId:guid}/contents"
+@page "/creator/chapters/{ChapterId:guid}/contents/new"
+@page "/creator/contents/{ContentId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<PageTitle>@(IsNew ? "New Content" : IsEditing ? "Edit Content" : "Content")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    @if (IsNew || IsEditing)
+    {
+        @* Content Form *@
+        <div class="d-flex justify-space-between align-center mb-6">
+            <MudText Typo="Typo.h4">@(IsNew ? "New Content" : "Edit Content")</MudText>
+            @if (IsEditing && editModel.Id != Guid.Empty)
+            {
+                <div>
+                    @if (editModel.IsPublished)
+                    {
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Unpublished"
+                                   OnClick="Unpublish"
+                                   Class="mr-2">
+                            Unpublish
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Success"
+                                   StartIcon="@Icons.Material.Filled.Publish"
+                                   OnClick="Publish">
+                            Publish
+                        </MudButton>
+                    }
+                </div>
+            }
+        </div>
+
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudCard Class="mb-4">
+                    <MudCardContent>
+                        <MudTextField @bind-Value="editModel.Title"
+                                      Label="Title"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      Class="mb-4" />
+
+                        <MudTextField @bind-Value="editModel.Description"
+                                      Label="Description"
+                                      Variant="Variant.Outlined"
+                                      Lines="2"
+                                      Class="mb-4" />
+
+                        @* Rich Text Editor *@
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Content Body</MudText>
+                        <div class="rich-editor-container mb-4">
+                            <div class="rich-editor-toolbar">
+                                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                                    <MudIconButton Icon="@Icons.Material.Filled.FormatBold" OnClick="@(() => ExecCommand("bold"))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.FormatItalic" OnClick="@(() => ExecCommand("italic"))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.FormatUnderlined" OnClick="@(() => ExecCommand("underline"))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.StrikethroughS" OnClick="@(() => ExecCommand("strikeThrough"))" />
+                                </MudButtonGroup>
+                                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Class="ml-2">
+                                    <MudIconButton Icon="@Icons.Material.Filled.FormatListBulleted" OnClick="@(() => ExecCommand("insertUnorderedList"))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.FormatListNumbered" OnClick="@(() => ExecCommand("insertOrderedList"))" />
+                                </MudButtonGroup>
+                                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Class="ml-2">
+                                    <MudIconButton Icon="@Icons.Material.Filled.FormatAlignLeft" OnClick="@(() => ExecCommand("justifyLeft"))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.FormatAlignCenter" OnClick="@(() => ExecCommand("justifyCenter"))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.FormatAlignRight" OnClick="@(() => ExecCommand("justifyRight"))" />
+                                </MudButtonGroup>
+                                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Class="ml-2">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Link" OnClick="InsertLink" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Image" OnClick="InsertImage" />
+                                </MudButtonGroup>
+                                <MudSelect T="string" Value="@selectedHeading" ValueChanged="OnHeadingChanged"
+                                           Variant="Variant.Outlined" Dense="true" Class="ml-2" Style="width: 120px;">
+                                    <MudSelectItem Value="@("p")">Paragraph</MudSelectItem>
+                                    <MudSelectItem Value="@("h1")">Heading 1</MudSelectItem>
+                                    <MudSelectItem Value="@("h2")">Heading 2</MudSelectItem>
+                                    <MudSelectItem Value="@("h3")">Heading 3</MudSelectItem>
+                                    <MudSelectItem Value="@("h4")">Heading 4</MudSelectItem>
+                                </MudSelect>
+                            </div>
+                            <div id="richEditor"
+                                 class="rich-editor-content"
+                                 contenteditable="true"
+                                 @onblur="OnEditorBlur">
+                                @((MarkupString)editModel.Body)
+                            </div>
+                        </div>
+                    </MudCardContent>
+                </MudCard>
+
+                @* Video Section *@
+                <MudCard Class="mb-4">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Class="mr-2" />
+                                Video
+                            </MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Upload"
+                                       Size="Size.Small"
+                                       OnClick="OpenVideoModal">
+                                Add Video
+                            </MudButton>
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (!string.IsNullOrEmpty(editModel.VideoUrl))
+                        {
+                            <div class="d-flex justify-space-between align-center mb-3">
+                                <MudChip T="string" Size="Size.Small" Color="@(IsUploadedVideo(editModel.VideoUrl) ? Color.Success : Color.Info)">
+                                    @(IsUploadedVideo(editModel.VideoUrl) ? "Uploaded Video" : IsYouTubeUrl(editModel.VideoUrl) ? "YouTube" : IsVimeoUrl(editModel.VideoUrl) ? "Vimeo" : "External URL")
+                                </MudChip>
+                                <MudButton Variant="Variant.Text"
+                                           Color="Color.Error"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.Delete"
+                                           OnClick="RemoveVideo">
+                                    Remove
+                                </MudButton>
+                            </div>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary mb-2">Preview:</MudText>
+                            @if (IsYouTubeUrl(editModel.VideoUrl))
+                            {
+                                <div class="video-preview">
+                                    <iframe src="@GetYouTubeEmbedUrl(editModel.VideoUrl)"
+                                            frameborder="0"
+                                            allowfullscreen
+                                            style="width: 100%; aspect-ratio: 16/9; border-radius: 8px;">
+                                    </iframe>
+                                </div>
+                            }
+                            else if (IsVimeoUrl(editModel.VideoUrl))
+                            {
+                                <div class="video-preview">
+                                    <iframe src="@GetVimeoEmbedUrl(editModel.VideoUrl)"
+                                            frameborder="0"
+                                            allowfullscreen
+                                            style="width: 100%; aspect-ratio: 16/9; border-radius: 8px;">
+                                    </iframe>
+                                </div>
+                            }
+                            else
+                            {
+                                <video controls style="width: 100%; max-height: 400px; border-radius: 8px;">
+                                    <source src="@($"https://localhost:7451{editModel.VideoUrl}")" type="video/mp4" />
+                                    Your browser does not support the video tag.
+                                </video>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary text-center py-4">
+                                No video added. Click "Add Video" to upload or link a video.
+                            </MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+
+                @* Attachments Section *@
+                <MudCard Class="mb-4">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.AttachFile" Class="mr-2" />
+                                Attachments (PDFs)
+                            </MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                                           Accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip"
+                                           FilesChanged="OnFilesSelected"
+                                           MaximumFileCount="10">
+                                <ActivatorContent>
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.Upload"
+                                               Size="Size.Small"
+                                               Disabled="@(uploadingFiles || !IsEditing)">
+                                        @if (uploadingFiles)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        }
+                                        Upload Files
+                                    </MudButton>
+                                </ActivatorContent>
+                            </MudFileUpload>
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (IsNew)
+                        {
+                            <MudAlert Severity="Severity.Info" Dense="true">
+                                Save the content first to upload attachments.
+                            </MudAlert>
+                        }
+                        else if (!editModel.Attachments.Any())
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                No attachments yet. Upload PDFs or documents.
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudList T="ContentAttachmentDto" Dense="true">
+                                @foreach (var attachment in editModel.Attachments)
+                                {
+                                    <MudListItem Icon="@GetFileIcon(attachment.ContentType)">
+                                        <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                            <div>
+                                                <MudText Typo="Typo.body2">@attachment.FileName</MudText>
+                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                    @FormatFileSize(attachment.FileSize)
+                                                </MudText>
+                                            </div>
+                                            <div>
+                                                <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                                               Size="Size.Small"
+                                                               Href="@($"https://localhost:7451{attachment.FilePath}")"
+                                                               Target="_blank" />
+                                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                               Size="Size.Small"
+                                                               Color="Color.Error"
+                                                               OnClick="@(() => DeleteAttachment(attachment))" />
+                                            </div>
+                                        </div>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudCard Class="mb-4">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Settings</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @* Main Picture *@
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Main Picture</MudText>
+                        <MudStack Row="true" AlignItems="AlignItems.End" Class="mb-4">
+                            <MudTextField @bind-Value="editModel.MainPicture"
+                                          Label="URL"
+                                          Variant="Variant.Outlined"
+                                          Placeholder="https://..." />
+                            <MudFileUpload T="IBrowserFile"
+                                           Accept="image/*"
+                                           FilesChanged="OnMainPictureSelected"
+                                           MaximumFileCount="1">
+                                <ActivatorContent>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Upload"
+                                                   Variant="Variant.Filled"
+                                                   Color="Color.Primary"
+                                                   Disabled="uploadingMainPicture" />
+                                </ActivatorContent>
+                            </MudFileUpload>
+                        </MudStack>
+
+                        @if (!string.IsNullOrEmpty(editModel.MainPicture))
+                        {
+                            <MudImage Src="@($"https://localhost:7451{editModel.MainPicture}")"
+                                      Alt="Main picture"
+                                      Width="200"
+                                      Class="rounded mb-4" />
+                        }
+
+                        @* Access Type - Simplified, plan access comes from Course *@
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+                            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" Size="Size.Small" />
+                            Access level (Public, Subscribers) is controlled at Course level.
+                        </MudAlert>
+
+                        <MudSwitch @bind-Value="requiresAccessCode"
+                                   Label="Requires Access Code"
+                                   Color="Color.Primary"
+                                   Class="mb-2" />
+
+                        @if (requiresAccessCode)
+                        {
+                            <MudTextField @bind-Value="editModel.AccessCode"
+                                          Label="Access Code"
+                                          Variant="Variant.Outlined"
+                                          Class="mb-4"
+                                          Placeholder="e.g. WORKSHOP2024"
+                                          HelperText="Users must enter this code to view this content" />
+                        }
+
+                        <MudNumericField @bind-Value="editModel.SortOrder"
+                                         Label="Sort Order"
+                                         Variant="Variant.Outlined"
+                                         Class="mb-4" />
+
+                        @if (!IsNew)
+                        {
+                            <div class="d-flex align-center gap-2 mb-2">
+                                <MudChip T="string" Color="@(editModel.IsPublished ? Color.Success : Color.Warning)" Size="Size.Small">
+                                    @(editModel.IsPublished ? "Published" : "Draft")
+                                </MudChip>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @editModel.ViewCount views
+                                </MudText>
+                            </div>
+                        }
+                    </MudCardContent>
+                </MudCard>
+
+                <MudCard>
+                    <MudCardContent>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   FullWidth="true"
+                                   OnClick="Save"
+                                   Disabled="saving"
+                                   Class="mb-2">
+                            @if (saving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            @(IsNew ? "Create" : "Save Changes")
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                   FullWidth="true"
+                                   OnClick="Cancel">
+                            Cancel
+                        </MudButton>
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+    else
+    {
+        @* Content List *@
+        <div class="d-flex justify-space-between align-center mb-6">
+            <div>
+                <MudText Typo="Typo.h4">Content</MudText>
+                @if (chapter != null)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        @chapter.Title
+                    </MudText>
+                }
+            </div>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Href="@($"/creator/chapters/{ChapterId}/contents/new")">
+                New Content
+            </MudButton>
+        </div>
+
+        @if (loading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (!contents.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No content yet. Create your first article!
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@contents" Hover="true" Elevation="2">
+                <HeaderContent>
+                    <MudTh>Title</MudTh>
+                    <MudTh>Access</MudTh>
+                    <MudTh>Views</MudTh>
+                    <MudTh>Published</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Title">
+                        <MudLink Href="@($"/creator/contents/{context.Id}")">@context.Title</MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Access">
+                        <MudChip T="string" Size="Size.Small" Color="@GetAccessColor(context.AccessLevel)">
+                            @context.AccessLevel
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Views">@context.ViewCount</MudTd>
+                    <MudTd DataLabel="Published">
+                        @if (context.PublishedAt.HasValue)
+                        {
+                            <MudText Typo="Typo.caption">@context.PublishedAt.Value.ToString("MMM dd, yyyy")</MudText>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Draft</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                       Size="Size.Small"
+                                       Href="@($"/read/{context.Slug}")"
+                                       Target="_blank" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Href="@($"/creator/contents/{context.Id}")" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="@(() => ConfirmDelete(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    }
+</MudContainer>
+
+@* Video Modal *@
+<MudDialog @bind-Visible="_showVideoModal" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true, BackdropClick = false })">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" />
+            <MudText Typo="Typo.h6">Add Video</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudTabs Rounded="true" Centered="true" @bind-ActivePanelIndex="_videoTabIndex" Class="mb-4">
+            <MudTabPanel Text="Upload" Icon="@Icons.Material.Filled.CloudUpload">
+                <MudStack Spacing="3" Class="mt-4">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Upload a video file from your computer. Supported formats: MP4, WebM, MOV. Max size: 500MB.
+                    </MudText>
+
+                    @if (_uploadingVideo)
+                    {
+                        <MudPaper Class="pa-4 text-center" Elevation="0" Style="border: 2px dashed var(--mud-palette-lines-default); border-radius: 8px;">
+                            <MudProgressCircular Indeterminate="@(_uploadProgress < 0)" Value="@_uploadProgress" Size="Size.Large" Class="mb-2" />
+                            <MudText Typo="Typo.body1">
+                                @if (_uploadProgress < 0)
+                                {
+                                    <span>Preparing upload...</span>
+                                }
+                                else if (_uploadProgress < 100)
+                                {
+                                    <span>Uploading... @_uploadProgress.ToString("F0")%</span>
+                                }
+                                else
+                                {
+                                    <span>Processing...</span>
+                                }
+                            </MudText>
+                            @if (_selectedVideoFile != null)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@_selectedVideoFile.Name</MudText>
+                            }
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <MudFileUpload T="IBrowserFile"
+                                       Accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                                       FilesChanged="OnVideoFileSelected"
+                                       MaximumFileCount="1">
+                            <ActivatorContent>
+                                <MudPaper Class="pa-8 text-center cursor-pointer" Elevation="0"
+                                          Style="border: 2px dashed var(--mud-palette-primary); border-radius: 8px;">
+                                    <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Size="Size.Large" Color="Color.Primary" Class="mb-2" />
+                                    <MudText Typo="Typo.body1">Click to select a video file</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">MP4, WebM, MOV - Max 500MB</MudText>
+                                </MudPaper>
+                            </ActivatorContent>
+                        </MudFileUpload>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_videoUploadError))
+                    {
+                        <MudAlert Severity="Severity.Error" Dense="true">@_videoUploadError</MudAlert>
+                    }
+                </MudStack>
+            </MudTabPanel>
+
+            <MudTabPanel Text="URL" Icon="@Icons.Material.Filled.Link">
+                <MudStack Spacing="3" Class="mt-4">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Link to a YouTube, Vimeo, or any external video URL.
+                    </MudText>
+
+                    <MudTextField @bind-Value="_videoUrlInput"
+                                  Label="Video URL"
+                                  Variant="Variant.Outlined"
+                                  Placeholder="https://youtube.com/watch?v=... or https://vimeo.com/..."
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Link" />
+
+                    @if (!string.IsNullOrEmpty(_videoUrlInput))
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Preview:</MudText>
+                        @if (IsYouTubeUrl(_videoUrlInput))
+                        {
+                            <div style="aspect-ratio: 16/9; border-radius: 8px; overflow: hidden;">
+                                <iframe src="@GetYouTubeEmbedUrl(_videoUrlInput)"
+                                        frameborder="0"
+                                        allowfullscreen
+                                        style="width: 100%; height: 100%;">
+                                </iframe>
+                            </div>
+                        }
+                        else if (IsVimeoUrl(_videoUrlInput))
+                        {
+                            <div style="aspect-ratio: 16/9; border-radius: 8px; overflow: hidden;">
+                                <iframe src="@GetVimeoEmbedUrl(_videoUrlInput)"
+                                        frameborder="0"
+                                        allowfullscreen
+                                        style="width: 100%; height: 100%;">
+                                </iframe>
+                            </div>
+                        }
+                    }
+                </MudStack>
+            </MudTabPanel>
+        </MudTabs>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseVideoModal" Disabled="_uploadingVideo">Cancel</MudButton>
+        @if (_videoTabIndex == 1)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="ApplyVideoUrl"
+                       Disabled="@string.IsNullOrWhiteSpace(_videoUrlInput)">
+                Apply
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .rich-editor-container {
+        border: 1px solid var(--mud-palette-lines-default);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .rich-editor-toolbar {
+        background: var(--mud-palette-background-grey);
+        padding: 8px;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .rich-editor-content {
+        min-height: 400px;
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 16px;
+        background: var(--mud-palette-surface);
+        outline: none;
+    }
+
+    .rich-editor-content:focus {
+        background: var(--mud-palette-background);
+    }
+
+    .rich-editor-content h1 { font-size: 2em; margin: 0.5em 0; }
+    .rich-editor-content h2 { font-size: 1.5em; margin: 0.5em 0; }
+    .rich-editor-content h3 { font-size: 1.25em; margin: 0.5em 0; }
+    .rich-editor-content h4 { font-size: 1em; margin: 0.5em 0; font-weight: bold; }
+    .rich-editor-content p { margin: 0.5em 0; }
+    .rich-editor-content ul, .rich-editor-content ol { padding-left: 2em; }
+    .rich-editor-content img { max-width: 100%; height: auto; }
+
+    .video-preview {
+        max-width: 100%;
+        margin-top: 8px;
+    }
+</style>
+
+@implements IDisposable
+
+@code {
+    [Parameter]
+    public Guid? ChapterId { get; set; }
+
+    [Parameter]
+    public Guid? ContentId { get; set; }
+
+    private ChapterDto? chapter;
+    private List<ContentListDto> contents = new();
+    private bool loading = true;
+    private bool saving;
+    private bool requiresAccessCode;
+
+    private bool IsNew => Navigation.Uri.EndsWith("/new", StringComparison.OrdinalIgnoreCase);
+    private bool IsEditing => ContentId.HasValue && !IsNew;
+
+    private ContentEditModel editModel = new();
+
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            BuildBreadcrumbs();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+
+        if (ChapterId.HasValue)
+        {
+            chapter = await Api.GetChapterAsync(ChapterId.Value);
+            contents = await Api.GetContentsAsync(ChapterId.Value);
+        }
+
+        if (IsEditing && ContentId.HasValue)
+        {
+            var content = await Api.GetContentAsync(ContentId.Value);
+            if (content != null)
+            {
+                ChapterId = content.ChapterId;
+                chapter = await Api.GetChapterAsync(content.ChapterId);
+                editModel = new ContentEditModel
+                {
+                    Id = content.Id,
+                    Title = content.Title,
+                    Description = content.Description,
+                    Body = content.Body,
+                    MainPicture = content.MainPicture,
+                    VideoUrl = content.VideoUrl,
+                    AccessCode = content.HasAccessCode ? "********" : null,
+                    IsPublished = content.IsPublished,
+                    SortOrder = content.SortOrder,
+                    ViewCount = content.ViewCount,
+                    Attachments = content.Attachments?.ToList() ?? new()
+                };
+                requiresAccessCode = content.HasAccessCode;
+            }
+        }
+        else if (IsNew)
+        {
+            editModel = new ContentEditModel
+            {
+                SortOrder = contents.Count
+            };
+        }
+
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Creator", "/creator")
+        };
+
+        if (chapter != null)
+        {
+            breadcrumbs.Add(new("Chapters", $"/creator/courses/{chapter.CourseId}/chapters"));
+            breadcrumbs.Add(new(chapter.Title, $"/creator/chapters/{chapter.Id}/contents"));
+        }
+
+        if (IsNew)
+        {
+            breadcrumbs.Add(new("New", null, disabled: true));
+        }
+        else if (IsEditing)
+        {
+            breadcrumbs.Add(new("Edit", null, disabled: true));
+        }
+    }
+
+    private Color GetAccessColor(ContentAccessLevel accessType) => accessType switch
+    {
+        ContentAccessLevel.Public => Color.Success,
+        ContentAccessLevel.AllSubscribers => Color.Warning,
+        ContentAccessLevel.LoggedIn => Color.Info,
+        _ => Color.Default
+    };
+
+    private async Task Save()
+    {
+        // Sync editor content before saving
+        await OnEditorBlur();
+
+        saving = true;
+
+        // Access code only applies if switch is on
+        var accessCode = requiresAccessCode ? editModel.AccessCode : null;
+        // Clear masked placeholder if no change
+        if (accessCode == "********") accessCode = null;
+
+        if (IsNew && ChapterId.HasValue)
+        {
+            var dto = new CreateContentDto(
+                ChapterId.Value,
+                editModel.Title,
+                editModel.Description,
+                editModel.Body,
+                editModel.MainPicture,
+                editModel.VideoUrl,
+                ContentAccessLevel.Public, // Access controlled at Course level
+                accessCode
+            );
+            var created = await Api.CreateContentAsync(dto);
+            if (created != null)
+            {
+                Snackbar.Add("Content created successfully", Severity.Success);
+                Navigation.NavigateTo($"/creator/contents/{created.Id}");
+            }
+            else
+            {
+                Snackbar.Add("Failed to create content", Severity.Error);
+            }
+        }
+        else if (ContentId.HasValue)
+        {
+            var dto = new UpdateContentDto(
+                editModel.Title,
+                editModel.Description,
+                editModel.Body,
+                editModel.MainPicture,
+                editModel.VideoUrl,
+                ContentAccessLevel.Public, // Access controlled at Course level
+                accessCode,
+                editModel.IsPublished,
+                editModel.SortOrder
+            );
+            var updated = await Api.UpdateContentAsync(ContentId.Value, dto);
+            if (updated != null)
+            {
+                Snackbar.Add("Content updated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to update content", Severity.Error);
+            }
+        }
+
+        saving = false;
+    }
+
+    private async Task Publish()
+    {
+        if (ContentId.HasValue)
+        {
+            var published = await Api.PublishContentAsync(ContentId.Value);
+            if (published)
+            {
+                editModel.IsPublished = true;
+                Snackbar.Add("Content published", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to publish content", Severity.Error);
+            }
+        }
+    }
+
+    private async Task Unpublish()
+    {
+        if (ContentId.HasValue)
+        {
+            var unpublished = await Api.UnpublishContentAsync(ContentId.Value);
+            if (unpublished)
+            {
+                editModel.IsPublished = false;
+                Snackbar.Add("Content unpublished", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to unpublish content", Severity.Error);
+            }
+        }
+    }
+
+    private void Cancel()
+    {
+        if (ChapterId.HasValue)
+        {
+            Navigation.NavigateTo($"/creator/chapters/{ChapterId}/contents");
+        }
+        else
+        {
+            Navigation.NavigateTo("/creator");
+        }
+    }
+
+    private async Task ConfirmDelete(ContentListDto content)
+    {
+        var deleted = await Api.DeleteContentAsync(content.Id);
+        if (deleted)
+        {
+            contents.Remove(content);
+            Snackbar.Add("Content deleted", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete content", Severity.Error);
+        }
+    }
+
+    private class ContentEditModel
+    {
+        public Guid Id { get; set; }
+        public string Title { get; set; } = "";
+        public string? Description { get; set; }
+        public string Body { get; set; } = "";
+        public string? MainPicture { get; set; }
+        public string? VideoUrl { get; set; }
+        public string? AccessCode { get; set; }
+        public bool IsPublished { get; set; }
+        public int SortOrder { get; set; }
+        public int ViewCount { get; set; }
+        public List<ContentAttachmentDto> Attachments { get; set; } = new();
+    }
+
+    // Rich editor
+    private string selectedHeading = "p";
+    private bool uploadingMainPicture = false;
+    private bool uploadingFiles = false;
+
+    // Video modal
+    private bool _showVideoModal;
+    private int _videoTabIndex;
+    private string _videoUrlInput = "";
+    private bool _uploadingVideo;
+    private double _uploadProgress = -1;
+    private string? _videoUploadError;
+    private IBrowserFile? _selectedVideoFile;
+
+    private async Task ExecCommand(string command)
+    {
+        await JS.InvokeVoidAsync("document.execCommand", command, false, null);
+    }
+
+    private async Task OnHeadingChanged(string heading)
+    {
+        selectedHeading = heading;
+        await JS.InvokeVoidAsync("document.execCommand", "formatBlock", false, heading);
+    }
+
+    private async Task InsertLink()
+    {
+        var url = await JS.InvokeAsync<string>("prompt", "Enter URL:");
+        if (!string.IsNullOrEmpty(url))
+        {
+            await JS.InvokeVoidAsync("document.execCommand", "createLink", false, url);
+        }
+    }
+
+    private async Task InsertImage()
+    {
+        var url = await JS.InvokeAsync<string>("prompt", "Enter image URL:");
+        if (!string.IsNullOrEmpty(url))
+        {
+            await JS.InvokeVoidAsync("document.execCommand", "insertImage", false, url);
+        }
+    }
+
+    private async Task OnEditorBlur()
+    {
+        editModel.Body = await JS.InvokeAsync<string>("eval", "document.getElementById('richEditor').innerHTML");
+    }
+
+    // Video helpers
+    private bool IsYouTubeUrl(string? url) =>
+        !string.IsNullOrEmpty(url) && (url.Contains("youtube.com") || url.Contains("youtu.be"));
+
+    private bool IsVimeoUrl(string? url) =>
+        !string.IsNullOrEmpty(url) && url.Contains("vimeo.com");
+
+    private string GetYouTubeEmbedUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "";
+        try
+        {
+            var videoId = "";
+            if (url.Contains("v="))
+            {
+                var start = url.IndexOf("v=") + 2;
+                var end = url.IndexOf("&", start);
+                videoId = end > 0 ? url.Substring(start, end - start) : url.Substring(start);
+            }
+            else if (url.Contains("youtu.be/"))
+            {
+                var start = url.IndexOf("youtu.be/") + 9;
+                var end = url.IndexOf("?", start);
+                videoId = end > 0 ? url.Substring(start, end - start) : url.Substring(start);
+            }
+            return string.IsNullOrEmpty(videoId) ? url : $"https://www.youtube.com/embed/{videoId}";
+        }
+        catch
+        {
+            return url ?? "";
+        }
+    }
+
+    private string GetVimeoEmbedUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "";
+        try
+        {
+            var videoId = url.Split('/').LastOrDefault() ?? "";
+            return string.IsNullOrEmpty(videoId) ? url : $"https://player.vimeo.com/video/{videoId}";
+        }
+        catch
+        {
+            return url ?? "";
+        }
+    }
+
+    // File handling
+    private async Task OnMainPictureSelected(IBrowserFile file)
+    {
+        if (file == null) return;
+        uploadingMainPicture = true;
+        StateHasChanged();
+
+        try
+        {
+            var imageUrl = await Api.UploadImageAsync(file);
+            if (imageUrl != null)
+            {
+                editModel.MainPicture = imageUrl;
+                Snackbar.Add("Image uploaded", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            uploadingMainPicture = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnFilesSelected(IReadOnlyList<IBrowserFile> files)
+    {
+        if (files == null || !files.Any() || !ContentId.HasValue) return;
+
+        uploadingFiles = true;
+        StateHasChanged();
+
+        try
+        {
+            foreach (var file in files)
+            {
+                var attachment = await Api.UploadContentAttachmentAsync(ContentId.Value, file);
+                if (attachment != null)
+                {
+                    editModel.Attachments.Add(attachment);
+                }
+            }
+            Snackbar.Add($"{files.Count} file(s) uploaded", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            uploadingFiles = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteAttachment(ContentAttachmentDto attachment)
+    {
+        var deleted = await Api.DeleteContentAttachmentAsync(attachment.Id);
+        if (deleted)
+        {
+            editModel.Attachments.Remove(attachment);
+            Snackbar.Add("Attachment deleted", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete attachment", Severity.Error);
+        }
+    }
+
+    private string GetFileIcon(string contentType) => contentType switch
+    {
+        "application/pdf" => Icons.Custom.FileFormats.FilePdf,
+        "application/msword" or "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => Icons.Custom.FileFormats.FileWord,
+        "application/vnd.ms-excel" or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => Icons.Custom.FileFormats.FileExcel,
+        "application/vnd.ms-powerpoint" or "application/vnd.openxmlformats-officedocument.presentationml.presentation" => Icons.Material.Filled.Slideshow,
+        _ => Icons.Material.Filled.InsertDriveFile
+    };
+
+    private string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    // Video modal methods
+    private void OpenVideoModal()
+    {
+        _videoTabIndex = 0;
+        _videoUrlInput = "";
+        _videoUploadError = null;
+        _uploadProgress = -1;
+        _selectedVideoFile = null;
+        _showVideoModal = true;
+    }
+
+    private void CloseVideoModal()
+    {
+        _showVideoModal = false;
+        _videoUploadError = null;
+        _uploadProgress = -1;
+        _selectedVideoFile = null;
+    }
+
+    private void ApplyVideoUrl()
+    {
+        if (!string.IsNullOrWhiteSpace(_videoUrlInput))
+        {
+            editModel.VideoUrl = _videoUrlInput;
+            CloseVideoModal();
+        }
+    }
+
+    private async Task OnVideoFileSelected(IBrowserFile file)
+    {
+        if (file == null) return;
+
+        _selectedVideoFile = file;
+        _videoUploadError = null;
+
+        // Validate file size
+        if (file.Size > 500 * 1024 * 1024)
+        {
+            _videoUploadError = "File size exceeds 500MB limit";
+            return;
+        }
+
+        // Validate file type
+        var allowedTypes = new[] { "video/mp4", "video/webm", "video/quicktime" };
+        if (!allowedTypes.Contains(file.ContentType.ToLower()))
+        {
+            _videoUploadError = "Only MP4, WebM, and MOV files are allowed";
+            return;
+        }
+
+        _uploadingVideo = true;
+        _uploadProgress = 0;
+        StateHasChanged();
+
+        try
+        {
+            var videoUrl = await Api.UploadVideoAsync(file, (bytesRead, totalBytes) =>
+            {
+                _uploadProgress = (double)bytesRead / totalBytes * 100;
+                InvokeAsync(StateHasChanged);
+            });
+
+            if (videoUrl != null)
+            {
+                editModel.VideoUrl = videoUrl;
+                Snackbar.Add("Video uploaded successfully!", Severity.Success);
+                CloseVideoModal();
+            }
+            else
+            {
+                _videoUploadError = "Failed to upload video. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _videoUploadError = $"Upload error: {ex.Message}";
+        }
+        finally
+        {
+            _uploadingVideo = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveVideo()
+    {
+        if (!string.IsNullOrEmpty(editModel.VideoUrl))
+        {
+            // If it's an uploaded video, delete it from server
+            if (IsUploadedVideo(editModel.VideoUrl))
+            {
+                await Api.DeleteVideoAsync(editModel.VideoUrl);
+            }
+            editModel.VideoUrl = null;
+            Snackbar.Add("Video removed", Severity.Info);
+        }
+    }
+
+    private bool IsUploadedVideo(string? url) =>
+        !string.IsNullOrEmpty(url) && url.StartsWith("/uploads/videos/");
+}

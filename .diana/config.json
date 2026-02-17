@@ -1,0 +1,10 @@
+{
+    "version": "1.0",
+    "createdAt": "2026-01-31T23:27:41.8236619Z",
+    "architecture": "diana-clean",
+    "settings": {
+        "autoGenerateOnSave": false,
+        "includeDecorators": true,
+        "generateTests": false
+    }
+}

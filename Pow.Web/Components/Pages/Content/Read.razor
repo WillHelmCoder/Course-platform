@@ -1,0 +1,447 @@
+@page "/read/{Slug}"
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@inject ApiService Api
+@inject NavigationManager Navigation
+
+<PageTitle>@(content?.Title ?? "Loading...")</PageTitle>
+
+@if (loading)
+{
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="py-8">
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" Class="mb-4" />
+        <MudSkeleton Width="60%" Height="42px" Class="mb-2" />
+        <MudSkeleton Width="40%" Height="24px" Class="mb-4" />
+        <MudSkeleton Height="200px" />
+    </MudContainer>
+}
+else if (content == null)
+{
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="py-8 text-center">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Class="mb-4" />
+        <MudText Typo="Typo.h5">Content not found</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+            The content you're looking for doesn't exist or has been removed.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/content">
+            Browse Content
+        </MudButton>
+    </MudContainer>
+}
+else if (requiresCode && !codeValidated)
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="py-8">
+        <MudCard>
+            <MudCardContent Class="text-center pa-8">
+                <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
+                <MudText Typo="Typo.h5" Class="mb-2">Access Code Required</MudText>
+                <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+                    This content requires an access code to view.
+                </MudText>
+                <MudTextField @bind-Value="accessCode"
+                              Label="Access Code"
+                              Variant="Variant.Outlined"
+                              Class="mb-4"
+                              Immediate="true"
+                              OnKeyDown="OnCodeKeyDown" />
+                @if (!string.IsNullOrEmpty(codeError))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mb-4">@codeError</MudAlert>
+                }
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           OnClick="ValidateCode"
+                           Disabled="validatingCode">
+                    @if (validatingCode)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Unlock Content
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+    </MudContainer>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="py-8">
+        @* Breadcrumb *@
+        <MudBreadcrumbs Items="breadcrumbs" Class="mb-4 px-0" />
+
+        @* Main Image *@
+        @if (!string.IsNullOrEmpty(content.MainPicture))
+        {
+            <MudImage Src="@content.MainPicture"
+                      Alt="@content.Title"
+                      Class="rounded-lg mb-4"
+                      Style="width: 100%; max-height: 400px; object-fit: cover;" />
+        }
+
+        @* Header *@
+        <MudText Typo="Typo.h3" Class="mb-2">@content.Title</MudText>
+
+        <div class="d-flex flex-wrap gap-2 align-center mb-4">
+            <MudChip T="string" Size="Size.Small" Color="@GetAccessColor()">
+                @GetAccessLabel()
+            </MudChip>
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                @content.ChannelName / @content.CourseTitle / @content.ChapterTitle
+            </MudText>
+            @if (content.PublishedAt.HasValue)
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    @content.PublishedAt.Value.ToString("MMMM dd, yyyy")
+                </MudText>
+            }
+        </div>
+
+        @* Author Info *@
+        @if (content.AuthorId.HasValue)
+        {
+            <MudLink Href="@($"/profile/{content.AuthorId}")" Class="d-flex align-center gap-2 mb-4" Style="text-decoration: none;">
+                @if (!string.IsNullOrEmpty(content.AuthorProfilePicture))
+                {
+                    <MudAvatar Size="Size.Medium" Image="@content.AuthorProfilePicture" />
+                }
+                else
+                {
+                    <MudAvatar Size="Size.Medium" Color="Color.Primary">@((content.AuthorName ?? "?")[0])</MudAvatar>
+                }
+                <div>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@content.AuthorName</MudText>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Author</MudText>
+                </div>
+            </MudLink>
+        }
+
+        @if (!string.IsNullOrEmpty(content.Description))
+        {
+            <MudText Typo="Typo.subtitle1" Class="mud-text-secondary mb-4">
+                @content.Description
+            </MudText>
+        }
+
+        <MudDivider Class="mb-4" />
+
+        @* Content Body *@
+        <article class="content-body mb-6">
+            @((MarkupString)content.Body)
+        </article>
+
+        @* Video Section *@
+        @if (!string.IsNullOrEmpty(content.VideoUrl))
+        {
+            <MudPaper Class="pa-4 mb-6 rounded-lg" Elevation="0" Style="background: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mr-2" />
+                    Video
+                </MudText>
+                @if (IsYouTubeUrl(content.VideoUrl))
+                {
+                    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+                        <iframe src="@GetYouTubeEmbedUrl(content.VideoUrl)"
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px;"
+                                frameborder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowfullscreen></iframe>
+                    </div>
+                }
+                else if (IsVimeoUrl(content.VideoUrl))
+                {
+                    <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+                        <iframe src="@GetVimeoEmbedUrl(content.VideoUrl)"
+                                style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 8px;"
+                                frameborder="0"
+                                allow="autoplay; fullscreen; picture-in-picture"
+                                allowfullscreen></iframe>
+                    </div>
+                }
+                else
+                {
+                    @* Uploaded or direct video URL *@
+                    <video controls style="width: 100%; border-radius: 8px;">
+                        <source src="@GetVideoUrl(content.VideoUrl)" type="video/mp4" />
+                        Your browser does not support the video tag.
+                    </video>
+                }
+            </MudPaper>
+        }
+
+        @* Attachments Section *@
+        @if (content.Attachments?.Any() == true)
+        {
+            <MudPaper Class="pa-4 mb-6 rounded-lg" Elevation="0" Style="background: var(--mud-palette-background-grey);">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.AttachFile" Class="mr-2" />
+                    Attachments
+                </MudText>
+                <MudList T="ContentAttachmentDto" Dense="true">
+                    @foreach (var attachment in content.Attachments.OrderBy(a => a.SortOrder))
+                    {
+                        <MudListItem T="ContentAttachmentDto" Class="pa-0">
+                            <MudLink Href="@attachment.FilePath" Target="_blank" Class="d-flex align-center gap-3 pa-2 rounded" Style="text-decoration: none; width: 100%;">
+                                <MudIcon Icon="@GetFileIcon(attachment.ContentType)" Color="Color.Primary" />
+                                <div class="flex-grow-1">
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@attachment.FileName</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@FormatFileSize(attachment.FileSize)</MudText>
+                                </div>
+                                <MudIcon Icon="@Icons.Material.Filled.Download" Size="Size.Small" Class="mud-text-secondary" />
+                            </MudLink>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        }
+
+        <MudDivider Class="my-4" />
+
+        @* Share Buttons *@
+        <Pow.Web.Components.ShareButtons Title="@content.Title" Description="@content.Description" />
+
+        @* Navigation *@
+        <div class="d-flex justify-space-between mt-6">
+            @if (content.Previous != null)
+            {
+                <MudButton Variant="Variant.Outlined"
+                           StartIcon="@Icons.Material.Filled.ArrowBack"
+                           Href="@($"/read/{content.Previous.Slug}")">
+                    @content.Previous.Title
+                </MudButton>
+            }
+            else
+            {
+                <div></div>
+            }
+
+            @if (content.Next != null)
+            {
+                <MudButton Variant="Variant.Outlined"
+                           EndIcon="@Icons.Material.Filled.ArrowForward"
+                           Href="@($"/read/{content.Next.Slug}")">
+                    @content.Next.Title
+                </MudButton>
+            }
+        </div>
+    </MudContainer>
+}
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = "";
+
+    private ContentReaderDto? content;
+    private bool loading = true;
+    private bool requiresCode;
+    private bool codeValidated;
+    private string accessCode = "";
+    private string? codeError;
+    private bool validatingCode;
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        codeValidated = false;
+        accessCode = "";
+        codeError = null;
+
+        content = await Api.GetContentForReaderAsync(Slug);
+
+        if (content != null)
+        {
+            requiresCode = content.RequiresCode;
+
+            if (!requiresCode)
+            {
+                await Api.TrackContentViewAsync(content.Id);
+            }
+
+            BuildBreadcrumbs();
+        }
+
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        if (content == null) return;
+
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Home", "/"),
+            new("Content", "/content"),
+            new(content.ChannelName, null, disabled: true),
+            new(content.CourseTitle, null, disabled: true),
+            new(content.Title, null, disabled: true)
+        };
+    }
+
+    private async Task OnCodeKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ValidateCode();
+        }
+    }
+
+    private async Task ValidateCode()
+    {
+        if (string.IsNullOrWhiteSpace(accessCode) || content == null)
+            return;
+
+        validatingCode = true;
+        codeError = null;
+
+        var isValid = await Api.ValidateAccessCodeAsync(content.Id, accessCode);
+
+        if (isValid)
+        {
+            codeValidated = true;
+            await Api.TrackContentViewAsync(content.Id);
+        }
+        else
+        {
+            codeError = "Invalid access code. Please try again.";
+        }
+
+        validatingCode = false;
+    }
+
+    private Color GetAccessColor() => content?.AccessLevel switch
+    {
+        ContentAccessLevel.Public => Color.Success,
+        ContentAccessLevel.AllSubscribers => Color.Warning,
+        ContentAccessLevel.LoggedIn => Color.Info,
+        _ => Color.Default
+    };
+
+    private string GetAccessLabel() => content?.AccessLevel switch
+    {
+        ContentAccessLevel.Public => "Free",
+        ContentAccessLevel.AllSubscribers => "Premium",
+        ContentAccessLevel.LoggedIn => "Code Required",
+        _ => "Unknown"
+    };
+
+    private bool IsYouTubeUrl(string? url) =>
+        !string.IsNullOrEmpty(url) && (url.Contains("youtube.com") || url.Contains("youtu.be"));
+
+    private bool IsVimeoUrl(string? url) =>
+        !string.IsNullOrEmpty(url) && url.Contains("vimeo.com");
+
+    private string GetYouTubeEmbedUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "";
+        try
+        {
+            var videoId = "";
+            if (url.Contains("youtu.be/"))
+            {
+                var parts = url.Split("youtu.be/");
+                if (parts.Length > 1)
+                    videoId = parts[1].Split("?")[0].Split("/")[0];
+            }
+            else if (url.Contains("v="))
+            {
+                var parts = url.Split("v=");
+                if (parts.Length > 1)
+                    videoId = parts[1].Split("&")[0].Split("/")[0];
+            }
+            return string.IsNullOrEmpty(videoId) ? url : $"https://www.youtube.com/embed/{videoId}";
+        }
+        catch
+        {
+            return url;
+        }
+    }
+
+    private string GetVimeoEmbedUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "";
+        try
+        {
+            var parts = url.Split("vimeo.com/");
+            if (parts.Length > 1)
+            {
+                var videoId = parts[1].Split("?")[0].Split("/")[0];
+                return $"https://player.vimeo.com/video/{videoId}";
+            }
+            return url;
+        }
+        catch
+        {
+            return url;
+        }
+    }
+
+    private string GetFileIcon(string contentType) => contentType switch
+    {
+        "application/pdf" => Icons.Custom.FileFormats.FilePdf,
+        "application/msword" or "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => Icons.Custom.FileFormats.FileWord,
+        "application/vnd.ms-excel" or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => Icons.Custom.FileFormats.FileExcel,
+        "application/vnd.ms-powerpoint" or "application/vnd.openxmlformats-officedocument.presentationml.presentation" => Icons.Material.Filled.Slideshow,
+        _ => Icons.Material.Filled.InsertDriveFile
+    };
+
+    private string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private string GetVideoUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url)) return "";
+        // If it's a relative URL (uploaded video), prepend the API base URL
+        if (url.StartsWith("/uploads/"))
+            return $"https://localhost:7451{url}";
+        return url;
+    }
+}
+
+<style>
+    .content-body {
+        line-height: 1.8;
+        font-size: 1.1rem;
+    }
+
+    .content-body h1,
+    .content-body h2,
+    .content-body h3 {
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+    }
+
+    .content-body p {
+        margin-bottom: 1em;
+    }
+
+    .content-body img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+    }
+
+    .content-body pre {
+        background: var(--mud-palette-background-grey);
+        padding: 1em;
+        border-radius: 4px;
+        overflow-x: auto;
+    }
+
+    .content-body code {
+        background: var(--mud-palette-background-grey);
+        padding: 0.2em 0.4em;
+        border-radius: 3px;
+    }
+
+    .content-body blockquote {
+        border-left: 4px solid var(--mud-palette-primary);
+        margin: 1em 0;
+        padding: 0.5em 1em;
+        background: var(--mud-palette-background-grey);
+    }
+</style>

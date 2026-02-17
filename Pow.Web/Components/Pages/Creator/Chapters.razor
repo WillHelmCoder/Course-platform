@@ -1,0 +1,316 @@
+@page "/creator/courses/{CourseId:guid}/chapters"
+@page "/creator/courses/{CourseId:guid}/chapters/new"
+@page "/creator/chapters/{ChapterId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>@(IsNew ? "New Chapter" : IsEditing ? "Edit Chapter" : "Chapters")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    @if (IsNew || IsEditing)
+    {
+        @* Chapter Form *@
+        <MudText Typo="Typo.h4" Class="mb-6">@(IsNew ? "New Chapter" : "Edit Chapter")</MudText>
+
+        <MudCard>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" md="8">
+                        <MudTextField @bind-Value="editModel.Title"
+                                      Label="Title"
+                                      Variant="Variant.Outlined"
+                                      Required="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudNumericField @bind-Value="editModel.SortOrder"
+                                         Label="Sort Order"
+                                         Variant="Variant.Outlined" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="editModel.Description"
+                                      Label="Description"
+                                      Variant="Variant.Outlined"
+                                      Lines="3" />
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+            <MudCardActions Class="pa-4">
+                <MudButton Variant="Variant.Text" OnClick="Cancel">Cancel</MudButton>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="Save"
+                           Disabled="saving">
+                    @if (saving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    @(IsNew ? "Create" : "Save")
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    }
+    else
+    {
+        @* Chapter List *@
+        <div class="d-flex justify-space-between align-center mb-6">
+            <div>
+                <MudText Typo="Typo.h4">Chapters</MudText>
+                @if (course != null)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        @course.Title
+                    </MudText>
+                }
+            </div>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       Href="@($"/creator/courses/{CourseId}/chapters/new")">
+                New Chapter
+            </MudButton>
+        </div>
+
+        @if (loading)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else if (!chapters.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                No chapters yet. Create your first chapter to organize your content!
+            </MudAlert>
+        }
+        else
+        {
+            <MudDropContainer T="ChapterDto"
+                              Items="@chapters"
+                              ItemsSelector="@((item, zone) => true)"
+                              ItemDropped="OnChapterReordered"
+                              Class="d-flex flex-column gap-2">
+                <ChildContent>
+                    <MudDropZone T="ChapterDto" Identifier="chapters" Class="d-flex flex-column gap-2" />
+                </ChildContent>
+                <ItemRenderer>
+                    <MudPaper Class="pa-4 d-flex align-center" Elevation="2">
+                        <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Class="mr-2 mud-text-secondary" />
+                        <div class="flex-grow-1">
+                            <MudText Typo="Typo.subtitle1">@context.Title</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                @context.ContentCount content items
+                            </MudText>
+                        </div>
+                        <MudIconButton Icon="@Icons.Material.Filled.Article"
+                                       Size="Size.Small"
+                                       Href="@($"/creator/chapters/{context.Id}/contents")" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Href="@($"/creator/chapters/{context.Id}")" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       OnClick="@(() => ConfirmDelete(context))" />
+                    </MudPaper>
+                </ItemRenderer>
+            </MudDropContainer>
+        }
+    }
+</MudContainer>
+
+@implements IDisposable
+
+@code {
+    [Parameter]
+    public Guid? CourseId { get; set; }
+
+    [Parameter]
+    public Guid? ChapterId { get; set; }
+
+    private CourseDto? course;
+    private List<ChapterDto> chapters = new();
+    private bool loading = true;
+    private bool saving;
+
+    private bool IsNew => Navigation.Uri.EndsWith("/new", StringComparison.OrdinalIgnoreCase);
+    private bool IsEditing => ChapterId.HasValue && !IsNew;
+
+    private ChapterEditModel editModel = new();
+
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadData();
+        BuildBreadcrumbs();
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            BuildBreadcrumbs();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+
+        if (CourseId.HasValue)
+        {
+            course = await Api.GetCourseAsync(CourseId.Value);
+            chapters = await Api.GetChaptersAsync(CourseId.Value);
+        }
+
+        if (IsEditing && ChapterId.HasValue)
+        {
+            var chapter = await Api.GetChapterAsync(ChapterId.Value);
+            if (chapter != null)
+            {
+                CourseId = chapter.CourseId;
+                course = await Api.GetCourseAsync(chapter.CourseId);
+                editModel = new ChapterEditModel
+                {
+                    Title = chapter.Title,
+                    Description = chapter.Description,
+                    SortOrder = chapter.SortOrder
+                };
+            }
+        }
+        else if (IsNew)
+        {
+            editModel = new ChapterEditModel
+            {
+                SortOrder = chapters.Count
+            };
+        }
+
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Creator", "/creator"),
+            new("Courses", "/creator/courses")
+        };
+
+        if (course != null)
+        {
+            breadcrumbs.Add(new(course.Title, $"/creator/courses/{course.Id}"));
+            breadcrumbs.Add(new("Chapters", $"/creator/courses/{course.Id}/chapters"));
+        }
+
+        if (IsNew)
+        {
+            breadcrumbs.Add(new("New", null, disabled: true));
+        }
+        else if (IsEditing)
+        {
+            breadcrumbs.Add(new("Edit", null, disabled: true));
+        }
+    }
+
+    private async Task Save()
+    {
+        saving = true;
+
+        if (IsNew && CourseId.HasValue)
+        {
+            var dto = new CreateChapterDto(CourseId.Value, editModel.Title, editModel.Description);
+            var created = await Api.CreateChapterAsync(dto);
+            if (created != null)
+            {
+                Snackbar.Add("Chapter created successfully", Severity.Success);
+                Navigation.NavigateTo($"/creator/courses/{CourseId}/chapters");
+            }
+            else
+            {
+                Snackbar.Add("Failed to create chapter", Severity.Error);
+            }
+        }
+        else if (ChapterId.HasValue)
+        {
+            var dto = new UpdateChapterDto(editModel.Title, editModel.Description, editModel.SortOrder);
+            var updated = await Api.UpdateChapterAsync(ChapterId.Value, dto);
+            if (updated != null)
+            {
+                Snackbar.Add("Chapter updated successfully", Severity.Success);
+                Navigation.NavigateTo($"/creator/courses/{CourseId}/chapters");
+            }
+            else
+            {
+                Snackbar.Add("Failed to update chapter", Severity.Error);
+            }
+        }
+
+        saving = false;
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo($"/creator/courses/{CourseId}/chapters");
+    }
+
+    private async Task ConfirmDelete(ChapterDto chapter)
+    {
+        var deleted = await Api.DeleteChapterAsync(chapter.Id);
+        if (deleted)
+        {
+            chapters.Remove(chapter);
+            Snackbar.Add("Chapter deleted", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete chapter", Severity.Error);
+        }
+    }
+
+    private async Task OnChapterReordered(MudItemDropInfo<ChapterDto> dropItem)
+    {
+        if (dropItem.Item != null)
+        {
+            var index = dropItem.DropzoneIdentifier == "chapters" ? dropItem.IndexInZone : 0;
+            var chapter = dropItem.Item;
+
+            // Update sort order
+            var dto = new UpdateChapterDto(chapter.Title, chapter.Description, index);
+            await Api.UpdateChapterAsync(chapter.Id, dto);
+
+            // Refresh list
+            if (CourseId.HasValue)
+            {
+                chapters = await Api.GetChaptersAsync(CourseId.Value);
+            }
+        }
+    }
+
+    private class ChapterEditModel
+    {
+        public string Title { get; set; } = "";
+        public string? Description { get; set; }
+        public int SortOrder { get; set; }
+    }
+}

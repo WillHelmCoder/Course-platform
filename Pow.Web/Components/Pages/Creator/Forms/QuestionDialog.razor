@@ -1,0 +1,163 @@
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@inject ApiService Api
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(Question == null ? Icons.Material.Filled.Add : Icons.Material.Filled.Edit)" Class="mr-2" />
+            @(Question == null ? "Add Question" : "Edit Question")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="model.Text"
+                          Label="Question Text"
+                          Variant="Variant.Outlined"
+                          Required="true" />
+
+            <MudTextField @bind-Value="model.Description"
+                          Label="Description (optional)"
+                          Variant="Variant.Outlined"
+                          HelperText="Additional context for the question" />
+
+            <MudSelect T="QuestionType"
+                       Label="Question Type"
+                       @bind-Value="model.QuestionType"
+                       Variant="Variant.Outlined">
+                <MudSelectItem Value="QuestionType.SingleChoice">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.RadioButtonChecked" Size="Size.Small" />
+                        <span>Single Choice</span>
+                    </MudStack>
+                </MudSelectItem>
+                <MudSelectItem Value="QuestionType.MultipleChoice">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.CheckBox" Size="Size.Small" />
+                        <span>Multiple Choice</span>
+                    </MudStack>
+                </MudSelectItem>
+                <MudSelectItem Value="QuestionType.OpenText">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.TextFields" Size="Size.Small" />
+                        <span>Open Text</span>
+                    </MudStack>
+                </MudSelectItem>
+            </MudSelect>
+
+            <MudSwitch @bind-Value="model.IsRequired"
+                       Label="Required"
+                       Color="Color.Primary" />
+
+            @if (Question != null)
+            {
+                <MudNumericField @bind-Value="model.SortOrder"
+                                 Label="Sort Order"
+                                 Variant="Variant.Outlined"
+                                 Min="0" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="Submit"
+                   Disabled="saving || string.IsNullOrWhiteSpace(model.Text)">
+            @if (saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(Question == null ? "Add" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public Guid FormId { get; set; }
+
+    [Parameter]
+    public FormQuestionDto? Question { get; set; }
+
+    [Parameter]
+    public bool IsQuiz { get; set; }
+
+    private QuestionModel model = new();
+    private bool saving;
+
+    protected override void OnInitialized()
+    {
+        if (Question != null)
+        {
+            model = new QuestionModel
+            {
+                Text = Question.Text,
+                Description = Question.Description,
+                QuestionType = Question.QuestionType,
+                IsRequired = Question.IsRequired,
+                SortOrder = Question.SortOrder
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(model.Text))
+            return;
+
+        saving = true;
+
+        if (Question == null)
+        {
+            var dto = new CreateFormQuestionDto(
+                FormId,
+                model.Text,
+                model.Description,
+                model.QuestionType,
+                model.IsRequired
+            );
+
+            var result = await Api.CreateFormQuestionAsync(FormId, dto);
+            saving = false;
+
+            if (result != null)
+            {
+                MudDialog.Close(DialogResult.Ok(result));
+            }
+        }
+        else
+        {
+            var dto = new UpdateFormQuestionDto(
+                model.Text,
+                model.Description,
+                model.QuestionType,
+                model.IsRequired,
+                model.SortOrder
+            );
+
+            var result = await Api.UpdateFormQuestionAsync(Question.Id, dto);
+            saving = false;
+
+            if (result != null)
+            {
+                MudDialog.Close(DialogResult.Ok(result));
+            }
+        }
+    }
+
+    private class QuestionModel
+    {
+        public string Text { get; set; } = "";
+        public string? Description { get; set; }
+        public QuestionType QuestionType { get; set; } = QuestionType.SingleChoice;
+        public bool IsRequired { get; set; } = true;
+        public int SortOrder { get; set; }
+    }
+}

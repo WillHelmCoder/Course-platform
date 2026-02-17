@@ -1,0 +1,306 @@
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@implements IDisposable
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+@inject ApiService Api
+
+<MudThemeProvider @bind-IsDarkMode="@_isDarkMode" Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Dense="true">
+        @if (_showDrawer)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                           OnClick="@ToggleDrawer" />
+        }
+        <MudLink Href="/" Typo="Typo.h6" Class="ml-3" Color="Color.Inherit" Underline="Underline.None">Pow</MudLink>
+
+        @* Horizontal menu for public pages *@
+        @if (!_showDrawer)
+        {
+            <MudLink Href="/" Class="ml-6" Color="Color.Inherit" Underline="Underline.Hover">Home</MudLink>
+            <MudLink Href="/channels" Class="ml-4" Color="Color.Inherit" Underline="Underline.Hover">Channels</MudLink>
+            <MudLink Href="/content" Class="ml-4" Color="Color.Inherit" Underline="Underline.Hover">Content</MudLink>
+            <MudLink Href="/pricing" Class="ml-4" Color="Color.Inherit" Underline="Underline.Hover">Pricing</MudLink>
+        }
+
+        <MudSpacer />
+
+        <AuthorizeView>
+            <Authorized>
+                <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                               Color="Color.Inherit" OnClick="@ToggleDarkMode" />
+
+                @* Inbox Icon with Popover *@
+                <AuthorizeView Roles="Admin" Context="inboxAuth">
+                    <MudBadge Content="@_unreadCount" Color="Color.Error" Overlap="true" Visible="@(_unreadCount > 0)">
+                        <MudMenu Icon="@Icons.Material.Filled.Chat" Color="Color.Inherit" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                            <div style="width: 360px; max-height: 400px; overflow-y: auto;">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="pa-3">
+                                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">Inbox</MudText>
+                                    <MudLink Href="/creator/inbox" Color="Color.Primary" Typo="Typo.caption">Ver todo</MudLink>
+                                </MudStack>
+                                <MudDivider />
+                                @if (_inboxMessages.Any())
+                                {
+                                    @foreach (var message in _inboxMessages)
+                                    {
+                                        <MudMenuItem Href="@($"/creator/inbox/{message.ChannelId}")" Style="white-space: normal;">
+                                            <MudStack Spacing="0" Style="width: 100%;">
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                                    <MudText Typo="Typo.body2" Style="@(!message.IsRead ? "font-weight: 600;" : "")">
+                                                        @message.SenderName
+                                                    </MudText>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">
+                                                        @message.ChannelName
+                                                    </MudChip>
+                                                </MudStack>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="@(!message.IsRead ? "font-weight: 500;" : "")">
+                                                    @message.MessagePreview
+                                                </MudText>
+                                            </MudStack>
+                                        </MudMenuItem>
+                                        <MudDivider />
+                                    }
+                                }
+                                else
+                                {
+                                    <div class="pa-4 text-center">
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">No hay mensajes</MudText>
+                                    </div>
+                                }
+                            </div>
+                        </MudMenu>
+                    </MudBadge>
+                </AuthorizeView>
+
+                <MudMenu Icon="@Icons.Material.Filled.Person" Color="Color.Inherit">
+                    <MudMenuItem Href="/profile">Profile</MudMenuItem>
+                    <MudMenuItem Href="/my-plan">My Plan</MudMenuItem>
+                    <MudDivider />
+                    <MudMenuItem OnClick="Logout">Logout</MudMenuItem>
+                </MudMenu>
+            </Authorized>
+            <NotAuthorized>
+                <MudButton Href="/login" Color="Color.Inherit" Variant="Variant.Text">Login</MudButton>
+                <MudButton Href="/register" Variant="Variant.Outlined" Color="Color.Inherit" Class="ml-2">Register</MudButton>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    @if (_showDrawer)
+    {
+        <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="2">
+            <MudDrawerHeader>
+                <MudText Typo="Typo.h6">Menu</MudText>
+            </MudDrawerHeader>
+            <MudNavMenu>
+                <AuthorizeView>
+                    <Authorized>
+                        @* Regular users and Admin see these *@
+                        <AuthorizeView Roles="User,Admin" Context="userMenu">
+                            <MudNavLink Href="/feed" Icon="@Icons.Material.Filled.RssFeed">My Feed</MudNavLink>
+                            <MudNavLink Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
+                            <MudNavLink Href="/content" Icon="@Icons.Material.Filled.Article">Content</MudNavLink>
+                        </AuthorizeView>
+
+                        @* Only Admin (creators) see Creator menu *@
+                        <AuthorizeView Roles="Admin" Context="creatorAuth">
+                            <MudNavGroup Title="Creator" Icon="@Icons.Material.Filled.Create" Expanded="true">
+                                <MudNavLink Href="/creator">My Dashboard</MudNavLink>
+                                <MudNavLink Href="/creator/channels">My Channels</MudNavLink>
+                                <MudNavLink Href="/creator/courses">My Courses</MudNavLink>
+                                <MudNavLink Href="/creator/settings">Settings</MudNavLink>
+                            </MudNavGroup>
+                        </AuthorizeView>
+
+                        @* SuperAdmin sees Admin menu *@
+                        <AuthorizeView Roles="SuperAdmin" Context="adminAuth">
+                            <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="true">
+                                <MudNavLink Href="/admin">Dashboard</MudNavLink>
+                                <MudNavLink Href="/admin/users">Users</MudNavLink>
+                                <MudNavLink Href="/admin/plans">Plans</MudNavLink>
+                                <MudNavLink Href="/admin/channels">Channels</MudNavLink>
+                                <MudDivider Class="my-2" />
+                                <MudNavLink Href="/admin/site-settings">Site Settings</MudNavLink>
+                            </MudNavGroup>
+                        </AuthorizeView>
+
+                        <MudDivider Class="my-2" />
+                        <MudNavLink Href="/profile" Icon="@Icons.Material.Filled.Person">Profile</MudNavLink>
+                    </Authorized>
+                </AuthorizeView>
+            </MudNavMenu>
+        </MudDrawer>
+    }
+
+    <MudMainContent Class="pt-16 px-4" Style="min-height: calc(100vh - 100px);">
+        <MudContainer MaxWidth="MaxWidth.Large" Class="my-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+
+    <footer class="app-footer">
+        <div class="footer-links">
+            <a href="/terms">Terms and Conditions</a>
+            <span class="separator">|</span>
+            <a href="/privacy">Privacy Policy</a>
+        </div>
+        <div class="footer-content">
+            Developed by <a href="https://www.xipetechnology.com" target="_blank" rel="noopener">Xipe</a>
+            powered by <a href="https://www.metaprogramming.ai" target="_blank" rel="noopener">Diana</a>
+        </div>
+    </footer>
+</MudLayout>
+
+<style>
+    .app-footer {
+        background: var(--mud-palette-background-grey);
+        border-top: 1px solid var(--mud-palette-lines-default);
+        padding: 12px 0;
+        text-align: center;
+    }
+
+    .footer-links {
+        font-size: 0.8rem;
+        margin-bottom: 8px;
+    }
+
+    .footer-links a {
+        color: var(--mud-palette-text-primary);
+        text-decoration: none;
+    }
+
+    .footer-links a:hover {
+        text-decoration: underline;
+    }
+
+    .footer-links .separator {
+        margin: 0 12px;
+        color: var(--mud-palette-text-secondary);
+    }
+
+    .footer-content {
+        font-size: 0.75rem;
+        color: var(--mud-palette-text-secondary);
+    }
+
+    .footer-content a {
+        color: var(--mud-palette-primary);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .footer-content a:hover {
+        text-decoration: underline;
+    }
+</style>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = false;
+    private bool _showDrawer = true;
+    private bool _isAuthenticated = false;
+    private bool _isCreator = false;
+    private int _unreadCount = 0;
+    private List<InboxMessageDto> _inboxMessages = new();
+
+    // Pages where we hide the drawer (public/auth pages)
+    private readonly string[] _noDrawerPages = { "/login", "/register", "/register/creator", "/register/channel", "/", "/pricing", "/channels" };
+
+    private MudTheme _theme = new MudTheme()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#1a1a2e",
+            Secondary = "#4a4a6e",
+            AppbarBackground = "#1a1a2e"
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = "#7c7cff",
+            Secondary = "#a0a0ff"
+        }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        await UpdateDrawerVisibility();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await UpdateDrawerVisibility();
+            StateHasChanged();
+        }
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await UpdateDrawerVisibility();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task UpdateDrawerVisibility()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = authState.User?.Identity?.IsAuthenticated ?? false;
+        _isCreator = authState.User?.IsInRole("Admin") ?? false;
+
+        var currentPath = new Uri(Nav.Uri).AbsolutePath.ToLower();
+
+        // Show drawer only when authenticated AND not on public pages
+        if (_isAuthenticated)
+        {
+            _showDrawer = true;
+
+            // Load inbox messages for creators
+            if (_isCreator)
+            {
+                await LoadInboxMessages();
+            }
+        }
+        else
+        {
+            // For non-authenticated users, hide drawer on public pages
+            _showDrawer = false;
+        }
+    }
+
+    private async Task LoadInboxMessages()
+    {
+        try
+        {
+            _unreadCount = await Api.GetTotalUnreadCountAsync();
+            _inboxMessages = await Api.GetAllInboxMessagesAsync(10);
+        }
+        catch
+        {
+            // Silently fail - inbox is not critical
+        }
+    }
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    private void ToggleDarkMode() => _isDarkMode = !_isDarkMode;
+
+    private async Task Logout()
+    {
+        var authProvider = (Pow.Web.Services.AuthStateProvider)AuthStateProvider;
+        await authProvider.LogoutAsync();
+        Nav.NavigateTo("/login");
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

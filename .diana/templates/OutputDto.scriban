@@ -1,0 +1,21 @@
+{{## Project: Pow ##}}
+{{## Architecture: Xipe Boilerplate ##}}
+{{## This template was contextualized for this specific project ##}}
+
+// ╔════════════════════════════════════════════════════════════╗
+// ║                  GENERATED CODE - DO NOT EDIT              ║
+// ║            This file was generated automatically           ║
+// ║                 Any manual changes will be lost            ║
+// ╚════════════════════════════════════════════════════════════╝
+
+using System;
+
+namespace {{ dto_namespace }}
+{
+    public class {{ entity_name }}OutputDto
+    {
+        {{~ for prop in properties ~}}
+        public {{ prop.type }}{{ if prop.is_nullable }}?{{ end }} {{ prop.name }} { get; set; }
+        {{~ end ~}}
+    }
+}

@@ -1,0 +1,310 @@
+{
+  "id": "xipe-boilerplate",
+  "name": "Xipe Boilerplate",
+  "description": "Full-stack boilerplate with JWT Auth, Multi-tenant support (Tenant/User), SQLite/SqlServer switch, and Blazor frontend with Login/Register/Dashboard/Profile.",
+  "version": "1.0.0",
+  "framework": "net9.0",
+  "projects": [
+    {
+      "name": "Domain",
+      "suffix": ".Domain",
+      "type": "classlib",
+      "sdk": null,
+      "references": [],
+      "nugets": [],
+      "folders": [
+        "Entities",
+        "Interfaces",
+        "DTOs"
+      ],
+      "files": [
+        {
+          "path": "Entities/BaseEntity.cs",
+          "template": "XipeBaseEntity"
+        },
+        {
+          "path": "Entities/Tenant.cs",
+          "template": "XipeTenant"
+        },
+        {
+          "path": "Entities/User.cs",
+          "template": "XipeUser"
+        },
+        {
+          "path": "DTOs/AuthDtos.cs",
+          "template": "XipeAuthDtos"
+        },
+        {
+          "path": "Interfaces/IAuthService.cs",
+          "template": "XipeIAuthService"
+        }
+      ],
+      "cleanup": null,
+      "systemPrompt": "## Project: {SolutionName}.Domain\n\nDomain layer with base entities and interfaces.\n\n**Key Files:**\n- \u0060Entities/BaseEntity.cs\u0060 - Base class with Id, CreatedAt, TenantId\n- \u0060Entities/Tenant.cs\u0060 - Multi-tenant root entity\n- \u0060Entities/User.cs\u0060 - User entity with Email, PasswordHash\n- \u0060DTOs/AuthDtos.cs\u0060 - Login, Register, Token DTOs\n- \u0060Interfaces/IAuthService.cs\u0060 - Auth service interface"
+    },
+    {
+      "name": "Api",
+      "suffix": ".Api",
+      "type": "webapi",
+      "sdk": null,
+      "references": [
+        "Domain"
+      ],
+      "nugets": [
+        {
+          "name": "Microsoft.EntityFrameworkCore",
+          "version": "9.0.12"
+        },
+        {
+          "name": "Microsoft.EntityFrameworkCore.Sqlite",
+          "version": "9.0.12"
+        },
+        {
+          "name": "Microsoft.EntityFrameworkCore.SqlServer",
+          "version": "9.0.12"
+        },
+        {
+          "name": "Microsoft.EntityFrameworkCore.Design",
+          "version": "9.0.12"
+        },
+        {
+          "name": "Microsoft.AspNetCore.Authentication.JwtBearer",
+          "version": "9.0.12"
+        },
+        {
+          "name": "Swashbuckle.AspNetCore",
+          "version": "7.2.0"
+        },
+        {
+          "name": "BCrypt.Net-Next",
+          "version": "4.0.3"
+        }
+      ],
+      "folders": [
+        "Data",
+        "Services",
+        "Controllers",
+        "Properties"
+      ],
+      "files": [
+        {
+          "path": "Data/AppDbContext.cs",
+          "template": "XipeDbContext"
+        },
+        {
+          "path": "Data/AppSeeder.cs",
+          "template": "XipeSeeder"
+        },
+        {
+          "path": "Services/AuthService.cs",
+          "template": "XipeAuthService"
+        },
+        {
+          "path": "Controllers/AuthController.cs",
+          "template": "XipeAuthController"
+        },
+        {
+          "path": "Program.cs",
+          "template": "XipeProgramApi"
+        },
+        {
+          "path": "appsettings.json",
+          "template": "XipeAppSettings"
+        },
+        {
+          "path": "Properties/launchSettings.json",
+          "template": "XipeLaunchSettings"
+        }
+      ],
+      "cleanup": null,
+      "systemPrompt": "## Project: {SolutionName}.Api\n\nASP.NET Core Web API with JWT authentication.\n\n**Key Files:**\n- \u0060Data/AppDbContext.cs\u0060 - EF Core DbContext with SQLite/SqlServer switch\n- \u0060Services/AuthService.cs\u0060 - JWT token generation and validation\n- \u0060Controllers/AuthController.cs\u0060 - Login, Register, Logout, RefreshToken, ForgotPassword\n- \u0060Program.cs\u0060 - Configured with JWT auth and database provider switch\n- \u0060appsettings.json\u0060 - Database configuration with Provider selector"
+    },
+    {
+      "name": "Web",
+      "suffix": ".Web",
+      "type": "blazor",
+      "sdk": null,
+      "references": [
+        "Domain"
+      ],
+      "nugets": [
+        {
+          "name": "Blazored.LocalStorage",
+          "version": "4.5.0"
+        },
+        {
+          "name": "Microsoft.AspNetCore.Components.Authorization",
+          "version": "9.0.12"
+        },
+        {
+          "name": "System.IdentityModel.Tokens.Jwt",
+          "version": "7.0.3"
+        },
+        {
+          "name": "MudBlazor",
+          "version": "8.15.0"
+        }
+      ],
+      "folders": [
+        "Services",
+        "Components/Pages/Auth",
+        "Components/Layout",
+        "Properties",
+        "wwwroot",
+        "wwwroot/css"
+      ],
+      "files": [
+        {
+          "path": "Program.cs",
+          "template": "XipeBlazorProgram"
+        },
+        {
+          "path": "wwwroot/index.html",
+          "template": "XipeBlazorIndex"
+        },
+        {
+          "path": "wwwroot/css/app.css",
+          "template": "XipeBlazorAppCss"
+        },
+        {
+          "path": "wwwroot/appsettings.json",
+          "template": "XipeBlazorAppSettings"
+        },
+        {
+          "path": "Properties/launchSettings.json",
+          "template": "XipeBlazorLaunchSettings"
+        },
+        {
+          "path": "Services/ApiService.cs",
+          "template": "XipeBlazorApiService"
+        },
+        {
+          "path": "Services/AuthStateProvider.cs",
+          "template": "XipeBlazorAuthState"
+        },
+        {
+          "path": "Components/_Imports.razor",
+          "template": "XipeBlazorImports"
+        },
+        {
+          "path": "App.razor",
+          "template": "XipeBlazorApp"
+        },
+        {
+          "path": "Components/Routes.razor",
+          "template": "XipeBlazorRoutes"
+        },
+        {
+          "path": "Components/RedirectToLogin.razor",
+          "template": "XipeBlazorRedirectToLogin"
+        },
+        {
+          "path": "Components/Layout/MainLayout.razor",
+          "template": "XipeBlazorMainLayout"
+        },
+        {
+          "path": "Components/Pages/Home.razor",
+          "template": "XipeBlazorHome"
+        },
+        {
+          "path": "Components/Pages/Auth/Login.razor",
+          "template": "XipeBlazorLoginPage"
+        },
+        {
+          "path": "Components/Pages/Auth/Register.razor",
+          "template": "XipeBlazorRegisterPage"
+        },
+        {
+          "path": "Components/Pages/Dashboard.razor",
+          "template": "XipeBlazorDashboard"
+        },
+        {
+          "path": "Components/Pages/Profile.razor",
+          "template": "XipeBlazorProfile"
+        }
+      ],
+      "cleanup": [
+        "Pages"
+      ],
+      "systemPrompt": "## Project: {SolutionName}.Web\n\nBlazor WebAssembly frontend.\n\n**Key Files:**\n- \u0060Services/ApiService.cs\u0060 - HTTP client for API calls\n- \u0060Services/AuthStateProvider.cs\u0060 - JWT token management\n- \u0060Components/Layout/MainLayout.razor\u0060 - Top bar layout\n- \u0060Components/Pages/Auth/Login.razor\u0060 - Login page\n- \u0060Components/Pages/Auth/Register.razor\u0060 - Register page\n- \u0060Components/Pages/Dashboard.razor\u0060 - Dashboard\n- \u0060Components/Pages/Profile.razor\u0060 - User profile"
+    }
+  ],
+  "baseEntities": [
+    {
+      "name": "Tenant",
+      "inherits": null,
+      "isAbstract": false,
+      "properties": [
+        {
+          "name": "Name",
+          "type": "string",
+          "default": null
+        },
+        {
+          "name": "Slug",
+          "type": "string",
+          "default": null
+        },
+        {
+          "name": "IsActive",
+          "type": "bool",
+          "default": "true"
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "inherits": null,
+      "isAbstract": false,
+      "properties": [
+        {
+          "name": "Email",
+          "type": "string",
+          "default": null
+        },
+        {
+          "name": "PasswordHash",
+          "type": "string",
+          "default": null
+        },
+        {
+          "name": "Role",
+          "type": "string",
+          "default": "\u0022User\u0022"
+        },
+        {
+          "name": "IsActive",
+          "type": "bool",
+          "default": "true"
+        },
+        {
+          "name": "RefreshToken",
+          "type": "string?",
+          "default": null
+        },
+        {
+          "name": "RefreshTokenExpiry",
+          "type": "DateTime?",
+          "default": null
+        }
+      ]
+    }
+  ],
+  "diana": {
+    "folders": {
+      "entities": "{SolutionName}.Domain/Entities",
+      "dtos": "{SolutionName}.Domain/DTOs",
+      "services": "{SolutionName}.Api/Services",
+      "controllers": "{SolutionName}.Api/Controllers"
+    },
+    "templates": null
+  },
+  "documentation": null,
+  "systemPrompt": "You are working on **{SolutionName}**, a multi-tenant application with JWT authentication.\n\n## Architecture: Xipe Boilerplate\n\n| Project | Type | Purpose |\n|---------|------|------|\n| {SolutionName}.Domain | Class Library | Entities, DTOs, Interfaces |\n| {SolutionName}.Api | Web API | REST API with JWT Auth |\n| {SolutionName}.Web | Blazor | Frontend SPA |\n\n## Database Configuration\nEdit \u0060appsettings.json\u0060 to switch between SQLite and SqlServer:\n\u0060\u0060\u0060json\n\u0022Database\u0022: {\n  \u0022Provider\u0022: \u0022SQLite\u0022,  // or \u0022SqlServer\u0022\n  \u0022Default\u0022: \u0022SQLite\u0022\n}\n\u0060\u0060\u0060\n\n## Base Entities\n- **Tenant** - Root entity for multi-tenancy\n- **User** - User with Email/Password, linked to Tenant\n\n## Auth Endpoints\n- POST \u0060/api/auth/login\u0060 - Login\n- POST \u0060/api/auth/register\u0060 - Register\n- POST \u0060/api/auth/logout\u0060 - Logout\n- POST \u0060/api/auth/refresh\u0060 - Refresh token\n- POST \u0060/api/auth/forgot-password\u0060 - Forgot password",
+  "folders": {
+    "entities": "{SolutionName}.Domain/Entities",
+    "dtos": "{SolutionName}.Domain/DTOs",
+    "services": "{SolutionName}.Api/Services",
+    "controllers": "{SolutionName}.Api/Controllers"
+  }
+}

@@ -1,0 +1,123 @@
+{{## Project: Pow ##}}
+{{## Architecture: Xipe Boilerplate ##}}
+{{## This template was contextualized for this specific project ##}}
+
+// ╔════════════════════════════════════════════════════════════╗
+// ║                  GENERATED CODE - DO NOT EDIT              ║
+// ║            This file was generated automatically           ║
+// ║                 Any manual changes will be lost            ║
+// ╚════════════════════════════════════════════════════════════╝
+
+using Microsoft.AspNetCore.Mvc;
+using {{ dto_namespace }};
+using {{ interfaces_namespace }};
+
+namespace {{ controllers_namespace }}
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class {{ entity_name }}Controller : ControllerBase
+    {
+        private readonly I{{ entity_name }}Service _service;
+
+        public {{ entity_name }}Controller(I{{ entity_name }}Service service)
+        {
+            _service = service;
+        }
+
+        /// <summary>
+        /// Obtiene todos los {{ entity_name }}s
+        /// </summary>
+        [HttpGet]
+        public async Task<ActionResult<List<{{ entity_name }}OutputDto>>> GetAll()
+        {
+            var items = await _service.GetAllAsync();
+            return Ok(items);
+        }
+
+        /// <summary>
+        /// Obtiene un {{ entity_name }} por ID
+        /// </summary>
+        [HttpGet("{id}")]
+        public async Task<ActionResult<{{ entity_name }}OutputDto>> GetById(Guid id)
+        {
+            var item = await _service.GetByIdAsync(id);
+            if (item == null)
+                return NotFound(new { message = $"{{ entity_name }} con ID {id} no encontrado" });
+
+            return Ok(item);
+        }
+
+        /// <summary>
+        /// Crea un nuevo {{ entity_name }}
+        /// </summary>
+        [HttpPost]
+        public async Task<ActionResult<{{ entity_name }}OutputDto>> Create([FromBody] {{ entity_name }}InputDto input)
+        {
+            try
+            {
+                var created = await _service.CreateAsync(input);
+                return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Actualiza un {{ entity_name }} existente
+        /// </summary>
+        [HttpPut("{id}")]
+        public async Task<ActionResult<{{ entity_name }}OutputDto>> Update(Guid id, [FromBody] {{ entity_name }}InputDto input)
+        {
+            try
+            {
+                var updated = await _service.UpdateAsync(id, input);
+                if (updated == null)
+                    return NotFound(new { message = $"{{ entity_name }} con ID {id} no encontrado" });
+
+                return Ok(updated);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Elimina un {{ entity_name }}
+        /// </summary>
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            var deleted = await _service.DeleteAsync(id);
+            if (!deleted)
+                return NotFound(new { message = $"{{ entity_name }} con ID {id} no encontrado" });
+
+            return NoContent();
+        }
+
+        /// <summary>
+        /// Cuenta el total de {{ entity_name }}s
+        /// </summary>
+        [HttpGet("count")]
+        public async Task<ActionResult<int>> Count()
+        {
+            var count = await _service.CountAsync();
+            return Ok(count);
+        }
+{{ for entity in unique_has_many }}
+
+        /// <summary>
+        /// Obtiene los {{ entity.related_entity }}s de un {{ entity_name }}
+        /// </summary>
+        [HttpGet("{id}/{{ entity.related_entity | string.downcase }}s")]
+        public async Task<ActionResult> Get{{ entity.related_entity }}s(Guid id)
+        {
+            var items = await _service.Get{{ entity.related_entity }}sAsync(id);
+            return Ok(items);
+        }
+{{ end }}
+    }
+}

@@ -1,0 +1,28 @@
+@using MudBlazor
+@using Microsoft.AspNetCore.Components.Authorization
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(Components.Layout.MainLayout)">
+                <NotAuthorized>
+                    <RedirectToLogin />
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>Not found</PageTitle>
+            <LayoutView Layout="@typeof(Components.Layout.MainLayout)">
+                <MudContainer MaxWidth="MaxWidth.Small" Class="d-flex justify-center align-center" Style="height: 60vh;">
+                    <MudPaper Class="pa-8 text-center" Elevation="0">
+                        <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Secondary" />
+                        <MudText Typo="Typo.h4" Class="mt-4">Page Not Found</MudText>
+                        <MudText Color="Color.Secondary" Class="mb-4">The page you're looking for doesn't exist.</MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">Go Home</MudButton>
+                    </MudPaper>
+                </MudContainer>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

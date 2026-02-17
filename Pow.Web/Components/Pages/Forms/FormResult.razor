@@ -1,0 +1,188 @@
+@page "/forms/result/{ResponseId:guid}"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize]
+@inject ApiService Api
+@inject NavigationManager Navigation
+
+<PageTitle>Form Result</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="py-8">
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (result == null)
+    {
+        <MudAlert Severity="Severity.Error">Result not found.</MudAlert>
+    }
+    else
+    {
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        @if (result.FormType == FormType.Quiz)
+                        {
+                            @if (result.Passed == true)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" />
+                                <MudText Typo="Typo.h4" Color="Color.Success">Congratulations!</MudText>
+                                <MudText Typo="Typo.body1">You passed the quiz.</MudText>
+                            }
+                            else if (result.Passed == false)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Large" />
+                                <MudText Typo="Typo.h4" Color="Color.Error">Not Quite</MudText>
+                                <MudText Typo="Typo.body1">You didn't pass this time. Keep learning!</MudText>
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Quiz" Color="Color.Primary" Size="Size.Large" />
+                                <MudText Typo="Typo.h4">Quiz Complete</MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Large" />
+                            <MudText Typo="Typo.h4">Thank You!</MudText>
+                            <MudText Typo="Typo.body1">Your response has been submitted.</MudText>
+                        }
+                    </MudStack>
+                </CardHeaderContent>
+            </MudCardHeader>
+
+            @if (result.FormType == FormType.Quiz && result.Score.HasValue && result.MaxScore.HasValue)
+            {
+                <MudCardContent>
+                    <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                        @{
+                            var percentage = result.MaxScore > 0
+                                ? (double)result.Score.Value / result.MaxScore.Value * 100
+                                : 0;
+                            var color = result.Passed == true ? Color.Success : result.Passed == false ? Color.Error : Color.Primary;
+                        }
+
+                        <MudProgressCircular Value="@percentage"
+                                             Color="@color"
+                                             Size="Size.Large"
+                                             Style="width: 150px; height: 150px;">
+                            <MudStack AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.h4">@percentage.ToString("F0")%</MudText>
+                                <MudText Typo="Typo.caption">@result.Score / @result.MaxScore</MudText>
+                            </MudStack>
+                        </MudProgressCircular>
+
+                        <MudText Typo="Typo.h5">@result.FormTitle</MudText>
+
+                        @if (result.Passed.HasValue)
+                        {
+                            <MudChip T="string" Size="Size.Large"
+                                     Color="@(result.Passed.Value ? Color.Success : Color.Error)">
+                                @(result.Passed.Value ? "PASSED" : "FAILED")
+                            </MudChip>
+                        }
+                    </MudStack>
+                </MudCardContent>
+            }
+
+            @* Show answers review *@
+            <MudCardContent>
+                <MudExpansionPanels>
+                    <MudExpansionPanel Text="Review Your Answers">
+                        <MudStack Spacing="3">
+                            @foreach (var answer in result.Answers)
+                            {
+                                <MudPaper Elevation="0" Class="pa-3" Style="background: var(--mud-palette-background-grey);">
+                                    <MudStack Spacing="1">
+                                        <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween">
+                                            <MudText Typo="Typo.body1" Class="font-weight-medium">@answer.QuestionText</MudText>
+                                            @if (result.FormType == FormType.Quiz && answer.QuestionType != QuestionType.OpenText)
+                                            {
+                                                <MudChip T="string" Size="Size.Small"
+                                                         Color="@(answer.IsCorrect == true ? Color.Success : answer.IsCorrect == false ? Color.Error : Color.Default)">
+                                                    @answer.PointsEarned / @answer.MaxPoints pts
+                                                </MudChip>
+                                            }
+                                        </MudStack>
+
+                                        <MudDivider Class="my-1" />
+
+                                        @if (answer.QuestionType == QuestionType.OpenText)
+                                        {
+                                            <MudText Typo="Typo.body2">
+                                                @(string.IsNullOrEmpty(answer.TextAnswer) ? "(No answer)" : answer.TextAnswer)
+                                            </MudText>
+                                        }
+                                        else if (answer.QuestionType == QuestionType.SingleChoice)
+                                        {
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                                <MudText Typo="Typo.body2">
+                                                    @(string.IsNullOrEmpty(answer.SelectedOptionText) ? "(No selection)" : answer.SelectedOptionText)
+                                                </MudText>
+                                                @if (result.FormType == FormType.Quiz && answer.IsCorrect.HasValue)
+                                                {
+                                                    <MudIcon Icon="@(answer.IsCorrect.Value ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
+                                                             Size="Size.Small"
+                                                             Color="@(answer.IsCorrect.Value ? Color.Success : Color.Error)" />
+                                                }
+                                            </MudStack>
+                                        }
+                                        else if (answer.QuestionType == QuestionType.MultipleChoice)
+                                        {
+                                            @if (answer.SelectedOptionTexts?.Any() == true)
+                                            {
+                                                <MudStack>
+                                                    @foreach (var optionText in answer.SelectedOptionTexts)
+                                                    {
+                                                        <MudText Typo="Typo.body2">• @optionText</MudText>
+                                                    }
+                                                </MudStack>
+                                                @if (result.FormType == FormType.Quiz && answer.IsCorrect.HasValue)
+                                                {
+                                                    <MudIcon Icon="@(answer.IsCorrect.Value ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
+                                                             Size="Size.Small"
+                                                             Color="@(answer.IsCorrect.Value ? Color.Success : Color.Error)" />
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.body2" Class="mud-text-secondary">(No selections)</MudText>
+                                            }
+                                        }
+                                    </MudStack>
+                                </MudPaper>
+                            }
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudCardContent>
+
+            <MudCardActions Class="pa-4">
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Href="/">
+                    Back to Home
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid ResponseId { get; set; }
+
+    private FormResponseDetailDto? result;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        loading = true;
+        result = await Api.GetFormResultAsync(ResponseId);
+        loading = false;
+    }
+}

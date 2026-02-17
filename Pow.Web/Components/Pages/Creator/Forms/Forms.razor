@@ -1,0 +1,210 @@
+@page "/creator/channels/{ChannelId:guid}/forms"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@attribute [Authorize(Roles = "Admin,SuperAdmin")]
+@inject ApiService Api
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Forms - @channelName</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    <div class="d-flex justify-space-between align-center mb-6">
+        <div>
+            <MudText Typo="Typo.h4">Forms & Surveys</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Create surveys and quizzes for your channel</MudText>
+        </div>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="ShowCreateDialog">
+            New Form
+        </MudButton>
+    </div>
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (!forms.Any())
+    {
+        <MudAlert Severity="Severity.Info">
+            No forms yet. Create your first form to start collecting responses!
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var form in forms)
+            {
+                <MudItem xs="12" md="6" lg="4">
+                    <MudCard Elevation="2" Class="h-100">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@(form.FormType == FormType.Quiz ? Icons.Material.Filled.Quiz : Icons.Material.Filled.Poll)"
+                                             Color="@(form.FormType == FormType.Quiz ? Color.Secondary : Color.Primary)" />
+                                    <MudText Typo="Typo.h6">@form.Title</MudText>
+                                </MudStack>
+                            </CardHeaderContent>
+                            <CardHeaderActions>
+                                <MudChip T="string" Size="Size.Small" Color="@(form.IsActive ? Color.Success : Color.Default)">
+                                    @(form.IsActive ? "Active" : "Inactive")
+                                </MudChip>
+                            </CardHeaderActions>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            @if (!string.IsNullOrEmpty(form.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                                    @(form.Description.Length > 100 ? form.Description.Substring(0, 100) + "..." : form.Description)
+                                </MudText>
+                            }
+
+                            <MudStack Spacing="1">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudChip T="string" Size="Size.Small" Color="@(form.FormType == FormType.Quiz ? Color.Secondary : Color.Primary)">
+                                        @form.FormType
+                                    </MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                                        @GetTriggerLabel(form.Trigger)
+                                    </MudChip>
+                                </MudStack>
+
+                                <MudStack Row="true" Spacing="4" Class="mt-2">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudIcon Icon="@Icons.Material.Filled.QuestionAnswer" Size="Size.Small" Class="mud-text-secondary" />
+                                        <MudText Typo="Typo.caption">@form.QuestionCount questions</MudText>
+                                    </MudStack>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Small" Class="mud-text-secondary" />
+                                        <MudText Typo="Typo.caption">@form.ResponseCount responses</MudText>
+                                    </MudStack>
+                                </MudStack>
+
+                                @if (form.FormType == FormType.Quiz && form.PassingScore.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
+                                        Passing score: @form.PassingScore%
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Edit"
+                                       Href="@($"/creator/channels/{ChannelId}/forms/{form.Id}")">
+                                Edit
+                            </MudButton>
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Info"
+                                       StartIcon="@Icons.Material.Filled.Assessment"
+                                       Href="@($"/creator/channels/{ChannelId}/forms/{form.Id}/responses")">
+                                Responses
+                            </MudButton>
+                            <MudSpacer />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="@(() => ConfirmDelete(form))" />
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public Guid ChannelId { get; set; }
+
+    private List<FormDto> forms = new();
+    private string channelName = "";
+    private bool loading = true;
+    private List<BreadcrumbItem> breadcrumbs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        loading = true;
+
+        var channel = await Api.GetChannelAsync(ChannelId);
+        if (channel != null)
+            channelName = channel.Name;
+
+        forms = await Api.GetFormsByChannelAsync(ChannelId);
+
+        BuildBreadcrumbs();
+        loading = false;
+    }
+
+    private void BuildBreadcrumbs()
+    {
+        breadcrumbs = new List<BreadcrumbItem>
+        {
+            new("Creator", "/creator"),
+            new("Channels", "/creator/channels"),
+            new(channelName, $"/creator/channels/{ChannelId}"),
+            new("Forms", null, disabled: true)
+        };
+    }
+
+    private string GetTriggerLabel(FormTrigger trigger) => trigger switch
+    {
+        FormTrigger.Manual => "Manual",
+        FormTrigger.AfterRegistration => "After Registration",
+        FormTrigger.AfterCourseComplete => "After Course",
+        _ => "Unknown"
+    };
+
+    private async Task ShowCreateDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            { "ChannelId", ChannelId }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<CreateFormDialog>("New Form", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is FormDto createdForm)
+        {
+            Navigation.NavigateTo($"/creator/channels/{ChannelId}/forms/{createdForm.Id}");
+        }
+    }
+
+    private async Task ConfirmDelete(FormDto form)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Delete Form",
+            $"Are you sure you want to delete \"{form.Title}\"? This will also delete all responses.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirm == true)
+        {
+            var deleted = await Api.DeleteFormAsync(form.Id);
+            if (deleted)
+            {
+                forms.Remove(form);
+                Snackbar.Add("Form deleted", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete form", Severity.Error);
+            }
+        }
+    }
+}

@@ -1,0 +1,28 @@
+{{## Project: Pow ##}}
+{{## Architecture: Xipe Boilerplate ##}}
+{{## This template was contextualized for this specific project ##}}
+
+// ╔════════════════════════════════════════════════════════════╗
+// ║                  GENERATED CODE - DO NOT EDIT              ║
+// ║            This file was generated automatically           ║
+// ║                 Any manual changes will be lost            ║
+// ╚════════════════════════════════════════════════════════════╝
+
+using {{ entities_namespace }};
+using {{ dto_namespace }};
+
+namespace {{ interfaces_namespace }}
+{
+    public interface I{{ entity_name }}Service
+    {
+        Task<List<{{ entity_name }}OutputDto>> GetAllAsync();
+        Task<{{ entity_name }}OutputDto?> GetByIdAsync(Guid id);
+        Task<{{ entity_name }}OutputDto> CreateAsync({{ entity_name }}InputDto input);
+        Task<{{ entity_name }}OutputDto?> UpdateAsync(Guid id, {{ entity_name }}InputDto input);
+        Task<bool> DeleteAsync(Guid id);
+        Task<int> CountAsync();
+{{ for entity in unique_has_many }}
+        Task<List<{{ entity.related_entity }}>> Get{{ entity.related_entity }}sAsync(Guid {{ entity_name_lower }}Id);
+{{ end }}
+    }
+}

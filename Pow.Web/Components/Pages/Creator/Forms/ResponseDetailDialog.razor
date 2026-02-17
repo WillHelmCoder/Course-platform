@@ -1,0 +1,136 @@
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Assignment" Class="mr-2" />
+            Response Details
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @* Header Info *@
+            <MudPaper Elevation="1" Class="pa-4">
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">User</MudText>
+                        <MudText>@Response.UserEmail</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Submitted</MudText>
+                        <MudText>@Response.CompletedAt?.ToString("MMM dd, yyyy HH:mm")</MudText>
+                    </MudItem>
+                    @if (IsQuiz && Response.Score.HasValue)
+                    {
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Score</MudText>
+                            <MudText>
+                                @Response.Score / @Response.MaxScore
+                                @if (Response.MaxScore > 0)
+                                {
+                                    var percentage = (double)Response.Score.Value / Response.MaxScore.Value * 100;
+                                    <text> (@percentage.ToString("F0")%)</text>
+                                }
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Result</MudText>
+                            @if (Response.Passed.HasValue)
+                            {
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(Response.Passed.Value ? Color.Success : Color.Error)">
+                                    @(Response.Passed.Value ? "Passed" : "Failed")
+                                </MudChip>
+                            }
+                        </MudItem>
+                    }
+                </MudGrid>
+            </MudPaper>
+
+            @* Answers *@
+            <MudText Typo="Typo.h6" Class="mt-2">Answers</MudText>
+
+            @foreach (var answer in Response.Answers)
+            {
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween">
+                            <MudText Typo="Typo.body1" Class="font-weight-medium">@answer.QuestionText</MudText>
+                            @if (IsQuiz && answer.QuestionType != QuestionType.OpenText)
+                            {
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(answer.IsCorrect == true ? Color.Success : answer.IsCorrect == false ? Color.Error : Color.Default)">
+                                    @answer.PointsEarned / @answer.MaxPoints pts
+                                </MudChip>
+                            }
+                        </MudStack>
+
+                        <MudDivider />
+
+                        @if (answer.QuestionType == QuestionType.OpenText)
+                        {
+                            <MudText Typo="Typo.body2">
+                                @(string.IsNullOrEmpty(answer.TextAnswer) ? "(No answer)" : answer.TextAnswer)
+                            </MudText>
+                        }
+                        else if (answer.QuestionType == QuestionType.SingleChoice)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.RadioButtonChecked" Size="Size.Small" Color="Color.Primary" />
+                                <MudText Typo="Typo.body2">
+                                    @(string.IsNullOrEmpty(answer.SelectedOptionText) ? "(No selection)" : answer.SelectedOptionText)
+                                </MudText>
+                                @if (IsQuiz && answer.IsCorrect.HasValue)
+                                {
+                                    <MudIcon Icon="@(answer.IsCorrect.Value ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
+                                             Size="Size.Small"
+                                             Color="@(answer.IsCorrect.Value ? Color.Success : Color.Error)" />
+                                }
+                            </MudStack>
+                        }
+                        else if (answer.QuestionType == QuestionType.MultipleChoice)
+                        {
+                            @if (answer.SelectedOptionTexts?.Any() == true)
+                            {
+                                @foreach (var optionText in answer.SelectedOptionTexts)
+                                {
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.CheckBox" Size="Size.Small" Color="Color.Primary" />
+                                        <MudText Typo="Typo.body2">@optionText</MudText>
+                                    </MudStack>
+                                }
+                                @if (IsQuiz && answer.IsCorrect.HasValue)
+                                {
+                                    <MudIcon Icon="@(answer.IsCorrect.Value ? Icons.Material.Filled.Check : Icons.Material.Filled.Close)"
+                                             Size="Size.Small"
+                                             Color="@(answer.IsCorrect.Value ? Color.Success : Color.Error)" />
+                                }
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Class="mud-text-secondary">(No selections)</MudText>
+                            }
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public FormResponseDetailDto Response { get; set; } = null!;
+
+    [Parameter]
+    public bool IsQuiz { get; set; }
+
+    private void Close() => MudDialog.Close();
+}

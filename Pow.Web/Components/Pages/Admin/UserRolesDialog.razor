@@ -1,0 +1,95 @@
+@using MudBlazor
+@using Pow.Domain.DTOs
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Manage Roles - @User.Email</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-3">Assign roles to this user:</MudText>
+        <MudStack>
+            @foreach (var role in AllRoles)
+            {
+                <MudCheckBox T="bool"
+                             Value="_selectedRoles.Contains(role.Id)"
+                             ValueChanged="@(v => ToggleRole(role.Id, v))"
+                             Disabled="_processing.Contains(role.Id)"
+                             Color="Color.Primary">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudText>@role.Name</MudText>
+                        @if (role.IsSystem)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info">System</MudChip>
+                        }
+                        @if (!string.IsNullOrEmpty(role.Description))
+                        {
+                            <MudText Color="Color.Secondary" Typo="Typo.caption">- @role.Description</MudText>
+                        }
+                    </MudStack>
+                </MudCheckBox>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public UserMembershipDto User { get; set; } = null!;
+    [Parameter] public List<RoleDto> AllRoles { get; set; } = new();
+
+    private HashSet<Guid> _selectedRoles = new();
+    private HashSet<Guid> _processing = new();
+    private bool _changed;
+
+    protected override void OnInitialized()
+    {
+        _selectedRoles = User.Roles.Select(r => r.Id).ToHashSet();
+    }
+
+    private async Task ToggleRole(Guid roleId, bool selected)
+    {
+        _processing.Add(roleId);
+        StateHasChanged();
+
+        try
+        {
+            bool success;
+            if (selected)
+            {
+                success = await Api.AssignRoleToUserAsync(User.UserId, roleId);
+                if (success) _selectedRoles.Add(roleId);
+            }
+            else
+            {
+                success = await Api.RemoveRoleFromUserAsync(User.UserId, roleId);
+                if (success) _selectedRoles.Remove(roleId);
+            }
+
+            if (success)
+            {
+                _changed = true;
+                var action = selected ? "assigned" : "removed";
+                Snackbar.Add($"Role {action}", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to update role", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _processing.Remove(roleId);
+        }
+    }
+
+    private void Close() => MudDialog.Close(_changed ? DialogResult.Ok(true) : DialogResult.Cancel());
+}

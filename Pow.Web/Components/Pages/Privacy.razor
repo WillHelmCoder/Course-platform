@@ -1,0 +1,41 @@
+@page "/privacy"
+@inject ApiService Api
+
+<PageTitle>Privacy Policy - Pow</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="py-8">
+    @if (loading)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="40px" Width="50%" Class="mb-4" />
+        <MudSkeleton SkeletonType="SkeletonType.Text" Class="mb-2" />
+        <MudSkeleton SkeletonType="SkeletonType.Text" Class="mb-2" />
+        <MudSkeleton SkeletonType="SkeletonType.Text" Class="mb-2" />
+        <MudSkeleton SkeletonType="SkeletonType.Text" Width="80%" />
+    }
+    else if (string.IsNullOrWhiteSpace(content))
+    {
+        <MudText Typo="Typo.h4" Class="mb-4">Privacy Policy</MudText>
+        <MudAlert Severity="Severity.Info">
+            Privacy policy has not been configured yet.
+        </MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.h4" Class="mb-6">Privacy Policy</MudText>
+        <MudPaper Class="pa-6" Elevation="0">
+            <div style="white-space: pre-wrap;">@content</div>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private bool loading = true;
+    private string content = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var setting = await Api.GetSettingAsync("privacy");
+        content = setting?.Value ?? "";
+        loading = false;
+    }
+}

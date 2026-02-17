@@ -1,0 +1,138 @@
+@using Pow.Domain.DTOs
+@using Pow.Web.Services
+@inject ApiService Api
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(Option == null ? Icons.Material.Filled.Add : Icons.Material.Filled.Edit)" Class="mr-2" />
+            @(Option == null ? "Add Option" : "Edit Option")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="model.Text"
+                          Label="Option Text"
+                          Variant="Variant.Outlined"
+                          Required="true" />
+
+            @if (IsQuiz)
+            {
+                <MudNumericField @bind-Value="model.Points"
+                                 Label="Points"
+                                 Variant="Variant.Outlined"
+                                 Min="0"
+                                 HelperText="Points awarded when this option is selected" />
+
+                <MudSwitch @bind-Value="model.IsCorrect"
+                           Label="Correct Answer"
+                           Color="Color.Success" />
+            }
+
+            @if (Option != null)
+            {
+                <MudNumericField @bind-Value="model.SortOrder"
+                                 Label="Sort Order"
+                                 Variant="Variant.Outlined"
+                                 Min="0" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="Submit"
+                   Disabled="saving || string.IsNullOrWhiteSpace(model.Text)">
+            @if (saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(Option == null ? "Add" : "Save")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public Guid QuestionId { get; set; }
+
+    [Parameter]
+    public FormAnswerOptionDto? Option { get; set; }
+
+    [Parameter]
+    public bool IsQuiz { get; set; }
+
+    private OptionModel model = new();
+    private bool saving;
+
+    protected override void OnInitialized()
+    {
+        if (Option != null)
+        {
+            model = new OptionModel
+            {
+                Text = Option.Text,
+                Points = Option.Points,
+                IsCorrect = Option.IsCorrect,
+                SortOrder = Option.SortOrder
+            };
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(model.Text))
+            return;
+
+        saving = true;
+
+        if (Option == null)
+        {
+            var dto = new CreateFormAnswerOptionDto(
+                QuestionId,
+                model.Text,
+                model.Points,
+                model.IsCorrect
+            );
+
+            var result = await Api.CreateAnswerOptionAsync(QuestionId, dto);
+            saving = false;
+
+            if (result != null)
+            {
+                MudDialog.Close(DialogResult.Ok(result));
+            }
+        }
+        else
+        {
+            var dto = new UpdateFormAnswerOptionDto(
+                model.Text,
+                model.Points,
+                model.IsCorrect,
+                model.SortOrder
+            );
+
+            var result = await Api.UpdateAnswerOptionAsync(Option.Id, dto);
+            saving = false;
+
+            if (result != null)
+            {
+                MudDialog.Close(DialogResult.Ok(result));
+            }
+        }
+    }
+
+    private class OptionModel
+    {
+        public string Text { get; set; } = "";
+        public int Points { get; set; } = 0;
+        public bool IsCorrect { get; set; }
+        public int SortOrder { get; set; }
+    }
+}

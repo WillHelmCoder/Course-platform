@@ -1,0 +1,24 @@
+{{## Project: Pow ##}}
+{{## Architecture: Xipe Boilerplate ##}}
+{{## This template was contextualized for this specific project ##}}
+
+// ╔════════════════════════════════════════════════════════════╗
+// ║                  GENERATED CODE - DO NOT EDIT              ║
+// ║            This file was generated automatically           ║
+// ║                 Any manual changes will be lost            ║
+// ╚════════════════════════════════════════════════════════════╝
+
+using System;
+
+namespace {{ dto_namespace }}
+{
+    /// <summary>
+    /// DTO para crear/actualizar {{ entity_name }}
+    /// </summary>
+    public class {{ entity_name }}InputDto
+    {
+        {{~ for prop in input_properties ~}}
+        public {{ prop.type }}{{ if prop.is_nullable }}?{{ end }} {{ prop.name }} { get; set; }
+        {{~ end ~}}
+    }
+}

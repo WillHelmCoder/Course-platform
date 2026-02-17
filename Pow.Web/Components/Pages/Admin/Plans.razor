@@ -1,0 +1,169 @@
+@page "/admin/plans"
+@using MudBlazor
+@using Pow.Domain.DTOs
+@attribute [Authorize(Roles = "SuperAdmin")]
+@inject ApiService Api
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>Plan Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+    <MudBreadcrumbs Items="_breadcrumbs" Class="mb-2" />
+
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Subscription Plans</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenPlanDialog">
+            New Plan
+        </MudButton>
+    </MudStack>
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudTable Items="_plans" Hover="true" Striped="true" Loading="_loading">
+            <HeaderContent>
+                <MudTh>Order</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Price</MudTh>
+                <MudTh>Interval</MudTh>
+                <MudTh>Features</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Order">@context.SortOrder</MudTd>
+                <MudTd DataLabel="Name">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        @context.Name
+                        @if (context.IsRecommended)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">Recommended</MudChip>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Price">
+                    @if (context.Price == 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success">Free</MudChip>
+                    }
+                    else
+                    {
+                        <span>@context.Currency @context.Price.ToString("N2")</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Interval">@context.Interval</MudTd>
+                <MudTd DataLabel="Features">
+                    <MudTooltip Text="@context.Description">
+                        <MudChip T="string" Size="Size.Small">@(context.MaxUsers == 0 ? "Unlimited" : $"{context.MaxUsers} users")</MudChip>
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small"
+                             Color="@(context.IsActive ? Color.Success : Color.Default)">
+                        @(context.IsActive ? "Active" : "Inactive")
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                   OnClick="() => EditPlan(context)" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="() => DeletePlan(context)" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudPaper>
+
+    <MudGrid Class="mt-4">
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.h4" Class="mt-2">@_stats?.TotalUsers</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Total Users</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.CardMembership" Size="Size.Large" Color="Color.Success" />
+                <MudText Typo="Typo.h4" Class="mt-2">@_stats?.ActiveSubscriptions</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Active Subscriptions</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4 text-center" Elevation="2">
+                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Size="Size.Large" Color="Color.Info" />
+                <MudText Typo="Typo.h4" Class="mt-2">@_plans.Count(p => p.IsActive)</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Active Plans</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>
+
+@code {
+    private List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new BreadcrumbItem("Admin", "/admin"),
+        new BreadcrumbItem("Plans", null, disabled: true)
+    };
+
+    private List<PlanDto> _plans = new();
+    private MembershipStatsDto? _stats;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        try
+        {
+            _plans = await Api.GetAdminPlansAsync();
+            _stats = await Api.GetAdminStatsAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenPlanDialog()
+    {
+        var parameters = new DialogParameters { { "Plan", null }, { "IsNew", true } };
+        var dialog = await Dialog.ShowAsync<PlanDialog>("New Plan", parameters);
+        var result = await dialog.Result;
+        if (!result.Canceled) await LoadDataAsync();
+    }
+
+    private async Task EditPlan(PlanDto plan)
+    {
+        var parameters = new DialogParameters { { "Plan", plan }, { "IsNew", false } };
+        var dialog = await Dialog.ShowAsync<PlanDialog>("Edit Plan", parameters);
+        var result = await dialog.Result;
+        if (!result.Canceled) await LoadDataAsync();
+    }
+
+    private async Task DeletePlan(PlanDto plan)
+    {
+        var confirm = await Dialog.ShowMessageBox(
+            "Delete Plan",
+            $"Are you sure you want to delete the '{plan.Name}' plan? Users on this plan will need to select a new one.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirm == true)
+        {
+            var success = await Api.DeletePlanAsync(plan.Id);
+            if (success)
+            {
+                Snackbar.Add("Plan deleted", Severity.Success);
+                await LoadDataAsync();
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete plan", Severity.Error);
+            }
+        }
+    }
+}

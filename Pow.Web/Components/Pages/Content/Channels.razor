@@ -1,0 +1,165 @@
+@page "/channels"
+@using Pow.Domain.DTOs
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Explore Channels - Pow</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudText Typo="Typo.h4" Class="mb-2">Explore Channels</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6">
+        Discover creators and subscribe to access their exclusive content.
+    </MudText>
+
+    @* Search *@
+    <MudTextField T="string" @bind-Value="searchText"
+                  Placeholder="Search channels..."
+                  Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search"
+                  Variant="Variant.Outlined"
+                  Immediate="true"
+                  Class="mb-6" />
+
+    @if (loading)
+    {
+        <MudGrid Spacing="4">
+            @for (int i = 0; i < 6; i++)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard>
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="150px" />
+                        <MudCardContent>
+                            <MudSkeleton Width="60%" />
+                            <MudSkeleton Width="80%" />
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else if (!filteredChannels.Any())
+    {
+        <MudAlert Severity="Severity.Info">
+            @if (string.IsNullOrEmpty(searchText))
+            {
+                <text>No channels available yet. Check back soon!</text>
+            }
+            else
+            {
+                <text>No channels found matching "@searchText".</text>
+            }
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid Spacing="4">
+            @foreach (var channel in filteredChannels)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Class="channel-card" Elevation="2" Style="height: 100%;">
+                        @if (!string.IsNullOrEmpty(channel.MainPicture))
+                        {
+                            <MudCardMedia Image="@channel.MainPicture" Height="150" />
+                        }
+                        else
+                        {
+                            <div style="height: 150px; background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-darken) 100%); display: flex; align-items: center; justify-content: center;">
+                                <MudText Typo="Typo.h2" Style="color: white; opacity: 0.8;">@channel.Name[0]</MudText>
+                            </div>
+                        }
+                        <MudCardContent>
+                            <MudText Typo="Typo.h6" Class="mb-2">@channel.Name</MudText>
+                            @if (!string.IsNullOrEmpty(channel.Description))
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Secondary"
+                                         Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                    @channel.Description
+                                </MudText>
+                            }
+                            <MudStack Row="true" Class="mt-3" Spacing="2">
+                                @if (channel.CourseCount > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Book" Color="Color.Default">
+                                        @channel.CourseCount courses
+                                    </MudChip>
+                                }
+                                @if (channel.ContentCount > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Article" Color="Color.Default">
+                                        @channel.ContentCount articles
+                                    </MudChip>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                        <MudCardActions Class="justify-space-between pa-4">
+                            <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                       Href="@($"/content/channel/{channel.Slug}")">
+                                View Content
+                            </MudButton>
+                            <AuthorizeView>
+                                <Authorized>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                               Href="@($"/register/channel/{channel.Slug}")">
+                                        Subscribe
+                                    </MudButton>
+                                </Authorized>
+                                <NotAuthorized>
+                                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                               Href="@($"/register/channel/{channel.Slug}")">
+                                        Join
+                                    </MudButton>
+                                </NotAuthorized>
+                            </AuthorizeView>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+<style>
+    .channel-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .channel-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+    }
+</style>
+
+@code {
+    private List<ChannelDto> channels = new();
+    private string searchText = "";
+    private bool loading = true;
+
+    private IEnumerable<ChannelDto> filteredChannels => string.IsNullOrWhiteSpace(searchText)
+        ? channels
+        : channels.Where(c =>
+            c.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
+            (c.Description?.Contains(searchText, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadChannels();
+    }
+
+    private async Task LoadChannels()
+    {
+        loading = true;
+        try
+        {
+            channels = await Api.GetPublicChannelsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading channels: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+}

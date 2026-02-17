@@ -1,0 +1,144 @@
+@page "/"
+
+<PageTitle>Pow - Content Platform</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    @* Hero Section *@
+    <div class="text-center mb-8" style="padding: 4rem 0;">
+        <MudText Typo="Typo.h2" Class="mb-2">
+            Welcome to <span style="color: var(--mud-palette-primary);">Pow</span>
+        </MudText>
+        <MudText Typo="Typo.h5" Color="Color.Secondary" Class="mb-6">
+            Create, share, and monetize your content
+        </MudText>
+
+        <AuthorizeView>
+            <Authorized>
+                <MudStack Row="true" Spacing="3" Justify="Justify.Center">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Href="/dashboard"
+                               StartIcon="@Icons.Material.Filled.Dashboard">
+                        Go to Dashboard
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Large" Href="/content"
+                               StartIcon="@Icons.Material.Filled.Article">
+                        Browse Content
+                    </MudButton>
+                </MudStack>
+            </Authorized>
+            <NotAuthorized>
+                <MudStack Row="true" Spacing="3" Justify="Justify.Center" Class="flex-wrap">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large" Href="/register/creator"
+                               StartIcon="@Icons.Material.Filled.Create">
+                        Become a Creator
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Large" Href="/channels"
+                               StartIcon="@Icons.Material.Filled.Search">
+                        Find a Channel
+                    </MudButton>
+                </MudStack>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-4">
+                    Already have an account? <MudLink Href="/login">Login here</MudLink>
+                </MudText>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+
+    <MudDivider Class="my-8" />
+
+    @* Two Paths Section *@
+    <MudGrid Justify="Justify.Center" Spacing="6" Class="mb-8">
+        <MudItem xs="12" md="5">
+            <MudCard Elevation="4" Class="pa-6" Style="height: 100%;">
+                <div class="text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.Campaign" Size="Size.Large" Color="Color.Primary" Style="font-size: 4rem;" />
+                    <MudText Typo="Typo.h5" Class="mt-4 mb-2">For Creators</MudText>
+                    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+                        Build your audience, create courses, and monetize your expertise.
+                        Set up your channel with custom subscription tiers.
+                    </MudText>
+                    <MudList T="string" Dense="true" Class="text-left mb-4">
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Create unlimited courses & content
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Set your own subscription plans
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Analytics & subscriber management
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Accept payments via Stripe
+                        </MudListItem>
+                    </MudList>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Href="/register/creator"
+                               StartIcon="@Icons.Material.Filled.RocketLaunch">
+                        Start Creating
+                    </MudButton>
+                </div>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="5">
+            <MudCard Elevation="2" Class="pa-6" Style="height: 100%;">
+                <div class="text-center">
+                    <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Large" Color="Color.Secondary" Style="font-size: 4rem;" />
+                    <MudText Typo="Typo.h5" Class="mt-4 mb-2">For Learners</MudText>
+                    <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+                        Discover amazing content from creators you love.
+                        Subscribe to channels and access exclusive materials.
+                    </MudText>
+                    <MudList T="string" Dense="true" Class="text-left mb-4">
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Browse free public content
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Subscribe to your favorite creators
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Access premium courses & tutorials
+                        </MudListItem>
+                        <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Track your learning progress
+                        </MudListItem>
+                    </MudList>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" Href="/channels"
+                               StartIcon="@Icons.Material.Filled.Explore">
+                        Explore Channels
+                    </MudButton>
+                </div>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @* Features Section *@
+    <MudText Typo="Typo.h4" Align="Align.Center" Class="mb-6">Platform Features</MudText>
+    <MudGrid Justify="Justify.Center" Spacing="4">
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4 text-center" Elevation="0">
+                <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.h6" Class="mt-2">Secure Access</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Content protection with flexible access levels
+                </MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4 text-center" Elevation="0">
+                <MudIcon Icon="@Icons.Material.Filled.Payments" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.h6" Class="mt-2">Monetization</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Multiple subscription tiers per channel
+                </MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4 text-center" Elevation="0">
+                <MudIcon Icon="@Icons.Material.Filled.Devices" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.h6" Class="mt-2">Any Device</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Responsive design for all screen sizes
+                </MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudContainer>

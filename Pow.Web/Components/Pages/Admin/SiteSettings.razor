@@ -1,0 +1,256 @@
+@page "/admin/site-settings"
+@using Microsoft.AspNetCore.Authorization
+@using Pow.Domain.DTOs
+@attribute [Authorize(Roles = "SuperAdmin")]
+@inject ApiService Api
+@inject ISnackbar Snackbar
+
+<PageTitle>Site Settings - Admin</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+    <MudBreadcrumbs Items="@breadcrumbs" Class="mb-4 px-0" />
+
+    <MudText Typo="Typo.h4" Class="mb-6">Site Settings</MudText>
+
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else
+    {
+        <MudGrid>
+            @* VIDEO PROVIDER SETTINGS *@
+            <MudItem xs="12">
+                <MudCard Class="mb-4">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.VideoLibrary" Class="mr-2" Style="vertical-align: middle;" />
+                                Video Provider
+                            </MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudSelect @bind-Value="videoProvider"
+                                   Label="Video Provider"
+                                   Variant="Variant.Outlined"
+                                   Class="mb-4"
+                                   HelperText="Select your video hosting provider">
+                            <MudSelectItem Value="@("")">-- Select Provider --</MudSelectItem>
+                            <MudSelectItem Value="@("mux")">MUX</MudSelectItem>
+                            <MudSelectItem Value="@("vimeo")">Vimeo</MudSelectItem>
+                        </MudSelect>
+
+                        @if (videoProvider == "mux")
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mb-4">
+                                MUX is a professional video platform with adaptive streaming (HLS), analytics, and global CDN.
+                                Get your API keys from <MudLink Href="https://dashboard.mux.com" Target="_blank">MUX Dashboard</MudLink>.
+                            </MudAlert>
+
+                            <MudTextField @bind-Value="muxTokenId"
+                                          Label="MUX Token ID"
+                                          Variant="Variant.Outlined"
+                                          Class="mb-4"
+                                          HelperText="Your MUX Access Token ID" />
+
+                            <MudTextField @bind-Value="muxTokenSecret"
+                                          Label="MUX Token Secret"
+                                          Variant="Variant.Outlined"
+                                          InputType="InputType.Password"
+                                          HelperText="@(hasMuxTokenSecret ? "Secret is configured. Leave empty to keep current value." : "Your MUX Access Token Secret")" />
+                        }
+                        else if (videoProvider == "vimeo")
+                        {
+                            <MudAlert Severity="Severity.Info" Class="mb-4">
+                                Vimeo provides video hosting with their embedded player.
+                                Create an app and get your Access Token from <MudLink Href="https://developer.vimeo.com/apps" Target="_blank">Vimeo Developer Portal</MudLink>.
+                            </MudAlert>
+
+                            <MudTextField @bind-Value="vimeoAccessToken"
+                                          Label="Vimeo Access Token"
+                                          Variant="Variant.Outlined"
+                                          InputType="InputType.Password"
+                                          HelperText="@(hasVimeoToken ? "Token is configured. Leave empty to keep current value." : "Your Vimeo Personal Access Token (with upload scope)")" />
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Warning">
+                                Please select a video provider to enable video uploads.
+                            </MudAlert>
+                        }
+                    </MudCardContent>
+                    <MudCardActions Class="pa-4">
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SaveVideoSettings"
+                                   Disabled="savingVideo">
+                            @if (savingVideo)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Save Video Settings
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+
+            @* TERMS AND CONDITIONS *@
+            <MudItem xs="12">
+                <MudCard Class="mb-4">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Terms and Conditions</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudTextField @bind-Value="termsContent"
+                                      Label="Content (Markdown supported)"
+                                      Variant="Variant.Outlined"
+                                      Lines="15"
+                                      HelperText="Use Markdown for formatting. This will be shown at /terms" />
+                    </MudCardContent>
+                    <MudCardActions Class="pa-4">
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SaveTerms"
+                                   Disabled="savingTerms">
+                            @if (savingTerms)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Save Terms
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+
+            @* PRIVACY POLICY *@
+            <MudItem xs="12">
+                <MudCard>
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Privacy Policy</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudTextField @bind-Value="privacyContent"
+                                      Label="Content (Markdown supported)"
+                                      Variant="Variant.Outlined"
+                                      Lines="15"
+                                      HelperText="Use Markdown for formatting. This will be shown at /privacy" />
+                    </MudCardContent>
+                    <MudCardActions Class="pa-4">
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SavePrivacy"
+                                   Disabled="savingPrivacy">
+                            @if (savingPrivacy)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Save Privacy Policy
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private bool loading = true;
+    private bool savingTerms;
+    private bool savingPrivacy;
+    private bool savingVideo;
+    private string termsContent = "";
+    private string privacyContent = "";
+
+    // Video settings
+    private string videoProvider = "";
+    private string? muxTokenId;
+    private string? muxTokenSecret;
+    private bool hasMuxTokenSecret;
+    private string? vimeoAccessToken;
+    private bool hasVimeoToken;
+
+    private List<BreadcrumbItem> breadcrumbs = new()
+    {
+        new("Admin", "/admin"),
+        new("Site Settings", null, disabled: true)
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var termsTask = Api.GetSettingAsync("terms");
+        var privacyTask = Api.GetSettingAsync("privacy");
+        var videoTask = Api.GetVideoSettingsAsync();
+
+        await Task.WhenAll(termsTask, privacyTask, videoTask);
+
+        termsContent = termsTask.Result?.Value ?? "";
+        privacyContent = privacyTask.Result?.Value ?? "";
+
+        if (videoTask.Result != null)
+        {
+            videoProvider = videoTask.Result.Provider;
+            muxTokenId = videoTask.Result.MuxTokenId;
+            hasMuxTokenSecret = videoTask.Result.HasMuxTokenSecret;
+            hasVimeoToken = videoTask.Result.HasVimeoToken;
+        }
+
+        loading = false;
+    }
+
+    private async Task SaveVideoSettings()
+    {
+        savingVideo = true;
+        var result = await Api.UpdateVideoSettingsAsync(videoProvider, muxTokenId, muxTokenSecret, vimeoAccessToken);
+        if (result != null)
+        {
+            hasMuxTokenSecret = result.HasMuxTokenSecret;
+            hasVimeoToken = result.HasVimeoToken;
+            muxTokenSecret = null; // Clear secret fields after save
+            vimeoAccessToken = null;
+            Snackbar.Add("Video settings saved successfully", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to save video settings", Severity.Error);
+        }
+        savingVideo = false;
+    }
+
+    private async Task SaveTerms()
+    {
+        savingTerms = true;
+        var result = await Api.UpdateSettingAsync("terms", termsContent, "Terms and Conditions");
+        if (result != null)
+        {
+            Snackbar.Add("Terms saved successfully", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to save terms", Severity.Error);
+        }
+        savingTerms = false;
+    }
+
+    private async Task SavePrivacy()
+    {
+        savingPrivacy = true;
+        var result = await Api.UpdateSettingAsync("privacy", privacyContent, "Privacy Policy");
+        if (result != null)
+        {
+            Snackbar.Add("Privacy policy saved successfully", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Failed to save privacy policy", Severity.Error);
+        }
+        savingPrivacy = false;
+    }
+}

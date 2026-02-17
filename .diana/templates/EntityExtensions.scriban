@@ -1,0 +1,51 @@
+{{## Project: Pow ##}}
+{{## Architecture: Xipe Boilerplate ##}}
+{{## This template was contextualized for this specific project ##}}
+
+// ╔════════════════════════════════════════════════════════════╗
+// ║                  GENERATED CODE - DO NOT EDIT              ║
+// ║            This file was generated automatically           ║
+// ║                 Any manual changes will be lost            ║
+// ╚════════════════════════════════════════════════════════════╝
+
+using {{ entities_namespace }};
+using {{ dto_namespace }};
+
+namespace {{ extensions_namespace }}
+{
+    public static class {{ entity_name }}Extensions
+    {
+        public static {{ entity_name }}OutputDto ToOutput(this {{ entity_name }} entity)
+        {
+            if (entity == null) return null;
+            
+            return new {{ entity_name }}OutputDto
+            {
+                {{~ for prop in properties ~}}
+                {{ prop.name }} = entity.{{ prop.name }},
+                {{~ end ~}}
+            };
+        }
+
+        public static {{ entity_name }} ToEntity(this {{ entity_name }}InputDto dto)
+        {
+            if (dto == null) return null;
+            
+            return new {{ entity_name }}
+            {
+                {{~ for prop in input_properties ~}}
+                {{ prop.name }} = dto.{{ prop.name }},
+                {{~ end ~}}
+            };
+        }
+
+        public static void UpdateFrom(this {{ entity_name }} entity, {{ entity_name }}InputDto dto)
+        {
+            if (entity == null || dto == null) return;
+            
+            {{~ for prop in input_properties ~}}
+            entity.{{ prop.name }} = dto.{{ prop.name }};
+            {{~ end ~}}
+        }
+    }
+}

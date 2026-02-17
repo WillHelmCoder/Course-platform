@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pow</title>
+    <base href="/" />
+
+    <!-- MudBlazor CSS -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+
+    <!-- App CSS -->
+    <link href="css/app.css" rel="stylesheet" />
+    <link href="Pow.Web.styles.css" rel="stylesheet" />
+
+    <style>
+        :root {
+            --diana-primary: #7c3aed;
+            --diana-secondary: #a78bfa;
+            --diana-glow: #c4b5fd;
+            --diana-bg: #ffffff;
+            --diana-text: #4a4a6e;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--diana-bg);
+        }
+
+        .diana-loader {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0d0d14 100%);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .diana-loader::before {
+            content: '';
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, transparent 50%);
+            animation: pulse-bg 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse-bg {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.2); opacity: 1; }
+        }
+
+        .ascii-container {
+            position: relative;
+            z-index: 1;
+        }
+
+        .ascii-art {
+            font-family: 'Courier New', monospace;
+            font-size: clamp(10px, 3vw, 20px);
+            line-height: 1.1;
+            color: var(--diana-glow);
+            text-shadow:
+                0 0 10px var(--diana-primary),
+                0 0 20px var(--diana-primary),
+                0 0 40px var(--diana-secondary),
+                0 0 80px var(--diana-primary);
+            white-space: pre;
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes glow {
+            from {
+                text-shadow:
+                    0 0 10px var(--diana-primary),
+                    0 0 20px var(--diana-primary),
+                    0 0 40px var(--diana-secondary),
+                    0 0 80px var(--diana-primary);
+                filter: brightness(1);
+            }
+            to {
+                text-shadow:
+                    0 0 20px var(--diana-glow),
+                    0 0 40px var(--diana-primary),
+                    0 0 80px var(--diana-secondary),
+                    0 0 120px var(--diana-primary);
+                filter: brightness(1.3);
+            }
+        }
+
+        .ascii-line {
+            display: block;
+            opacity: 0;
+            animation: fadeInLine 0.6s forwards;
+        }
+
+        .ascii-line:nth-child(1) { animation-delay: 0.3s; }
+        .ascii-line:nth-child(2) { animation-delay: 0.5s; }
+
+        @keyframes fadeInLine {
+            from {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .loading-bar-container {
+            width: 300px;
+            max-width: 80vw;
+            height: 3px;
+            background: rgba(124, 58, 237, 0.3);
+            border-radius: 2px;
+            margin-top: 50px;
+            overflow: hidden;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+        }
+
+        .loading-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--diana-primary), var(--diana-glow), var(--diana-primary));
+            background-size: 200% 100%;
+            animation: loading-wave 1.5s ease-in-out infinite;
+            border-radius: 2px;
+            box-shadow: 0 0 10px var(--diana-primary);
+        }
+
+        @keyframes loading-wave {
+            0% {
+                width: 0%;
+                background-position: 0% 0%;
+            }
+            50% {
+                width: 70%;
+                background-position: 100% 0%;
+            }
+            100% {
+                width: 100%;
+                background-position: 0% 0%;
+            }
+        }
+
+        .loading-text {
+            font-family: 'Roboto', sans-serif;
+            font-size: 12px;
+            color: rgba(167, 139, 250, 0.7);
+            margin-top: 25px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            position: relative;
+            z-index: 1;
+        }
+
+        .loading-dots {
+            display: inline-block;
+        }
+
+        .loading-dots span {
+            animation: dots 1.4s infinite;
+            opacity: 0;
+        }
+
+        .loading-dots span:nth-child(1) { animation-delay: 0s; }
+        .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes dots {
+            0%, 20% { opacity: 0; }
+            50% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* Floating particles */
+        .particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .particle {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: var(--diana-secondary);
+            border-radius: 50%;
+            opacity: 0.6;
+            animation: float-particle 8s infinite;
+            box-shadow: 0 0 6px var(--diana-primary);
+        }
+
+        .particle:nth-child(1) { left: 10%; animation-delay: 0s; animation-duration: 8s; }
+        .particle:nth-child(2) { left: 20%; animation-delay: 1s; animation-duration: 10s; }
+        .particle:nth-child(3) { left: 30%; animation-delay: 2s; animation-duration: 7s; }
+        .particle:nth-child(4) { left: 40%; animation-delay: 0.5s; animation-duration: 9s; }
+        .particle:nth-child(5) { left: 50%; animation-delay: 1.5s; animation-duration: 11s; }
+        .particle:nth-child(6) { left: 60%; animation-delay: 2.5s; animation-duration: 8s; }
+        .particle:nth-child(7) { left: 70%; animation-delay: 0.8s; animation-duration: 10s; }
+        .particle:nth-child(8) { left: 80%; animation-delay: 1.8s; animation-duration: 9s; }
+        .particle:nth-child(9) { left: 90%; animation-delay: 0.3s; animation-duration: 7s; }
+
+        @keyframes float-particle {
+            0% {
+                transform: translateY(100vh) scale(0);
+                opacity: 0;
+            }
+            10% {
+                opacity: 0.6;
+            }
+            90% {
+                opacity: 0.6;
+            }
+            100% {
+                transform: translateY(-10vh) scale(1);
+                opacity: 0;
+            }
+        }
+
+        /* Scanline effect */
+        .scanline {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--diana-secondary), transparent);
+            opacity: 0.3;
+            animation: scanline 3s linear infinite;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        @keyframes scanline {
+            0% { top: -2px; }
+            100% { top: 100%; }
+        }
+
+        /* Grid overlay for cyberpunk effect */
+        .diana-loader::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-image:
+                linear-gradient(rgba(124, 58, 237, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(124, 58, 237, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <div class="diana-loader">
+            <div class="particles">
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+                <div class="particle"></div>
+            </div>
+            <div class="scanline"></div>
+            <div class="ascii-container">
+                <div class="ascii-art">
+<span class="ascii-line">█▀▄ █ ▄▀█ █▄░█ ▄▀█</span>
+<span class="ascii-line">█▄▀ █ █▀█ █░▀█ █▀█</span>
+                </div>
+            </div>
+            <div class="loading-bar-container">
+                <div class="loading-bar"></div>
+            </div>
+            <div class="loading-text">
+                Initializing<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>
+            </div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui" style="display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #ffdddd; padding: 1rem; text-align: center; z-index: 9999;">
+        An unhandled error has occurred.
+        <a href="" class="reload" style="margin-left: 1rem;">Reload</a>
+        <a class="dismiss" style="margin-left: 1rem; cursor: pointer;">Dismiss</a>
+    </div>
+
+    <!-- Blazor WASM -->
+    <script src="_framework/blazor.webassembly.js"></script>
+
+    <!-- MudBlazor JS -->
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+</body>
+
+</html>

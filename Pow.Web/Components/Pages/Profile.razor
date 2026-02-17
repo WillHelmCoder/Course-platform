@@ -1,0 +1,866 @@
+@page "/profile"
+@page "/profile/{UserId:guid}"
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@inject ApiService Api
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDialogService DialogService
+
+<PageTitle>@(isOwnProfile ? "My Profile" : (profile?.DisplayName ?? "Profile")) - Pow</PageTitle>
+
+@if (isOwnProfile && !isAuthenticated)
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="py-8 text-center">
+        <MudIcon Icon="@Icons.Material.Filled.AccountCircle" Size="Size.Large" Color="Color.Primary" Class="mb-4" />
+        <MudText Typo="Typo.h5" Class="mb-2">Sign in to view your profile</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+            You need to be logged in to access your profile.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/login">
+            Sign In
+        </MudButton>
+    </MudContainer>
+}
+else
+{
+<MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+    @if (loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (profile != null)
+    {
+        <MudGrid Spacing="4">
+            @* Left Column - Profile Card *@
+            <MudItem xs="12" md="4">
+                <MudCard Elevation="3">
+                    <MudCardContent Class="text-center pa-6">
+                        @* Profile Picture *@
+                        <div class="profile-picture-container mb-4">
+                            @if (!string.IsNullOrEmpty(profile.ProfilePicture))
+                            {
+                                <MudAvatar Size="Size.Large" Style="width: 120px; height: 120px;">
+                                    <MudImage Src="@GetImageUrl(profile.ProfilePicture)" />
+                                </MudAvatar>
+                            }
+                            else
+                            {
+                                <MudAvatar Color="Color.Primary" Size="Size.Large" Style="width: 120px; height: 120px; font-size: 3rem;">
+                                    @GetInitials()
+                                </MudAvatar>
+                            }
+
+                            @if (isOwnProfile && isEditing)
+                            {
+                                <MudFileUpload T="IBrowserFile"
+                                               Accept="image/*"
+                                               FilesChanged="OnProfilePictureSelected"
+                                               MaximumFileCount="1"
+                                               Class="mt-2">
+                                    <ActivatorContent>
+                                        <MudButton Variant="Variant.Text"
+                                                   Color="Color.Primary"
+                                                   Size="Size.Small"
+                                                   StartIcon="@Icons.Material.Filled.PhotoCamera"
+                                                   Disabled="uploadingImage">
+                                            @(uploadingImage ? "Uploading..." : "Change Photo")
+                                        </MudButton>
+                                    </ActivatorContent>
+                                </MudFileUpload>
+                            }
+                        </div>
+
+                        @* Name and Role *@
+                        <MudText Typo="Typo.h5" Class="mb-1">
+                            @(profile.DisplayName ?? profile.Email?.Split('@')[0] ?? "User")
+                        </MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                            @profile.Email
+                        </MudText>
+                        <MudChip T="string" Color="Color.Primary" Size="Size.Small">
+                            @(profile.Role ?? "User")
+                        </MudChip>
+
+                        @* Bio *@
+                        @if (!string.IsNullOrEmpty(profile.Bio))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-4" Style="white-space: pre-line;">
+                                @profile.Bio
+                            </MudText>
+                        }
+
+                        @* Social Links *@
+                        @if (HasSocialLinks())
+                        {
+                            <MudDivider Class="my-4" />
+                            <MudStack Row="true" Justify="Justify.Center" Spacing="1" Wrap="Wrap.Wrap">
+                                @if (!string.IsNullOrEmpty(profile.Website))
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Language"
+                                                   Size="Size.Medium"
+                                                   Color="Color.Default"
+                                                   Href="@FormatUrl(profile.Website)"
+                                                   Target="_blank" />
+                                }
+                                @if (!string.IsNullOrEmpty(profile.Twitter))
+                                {
+                                    <MudIconButton Icon="@Icons.Custom.Brands.Twitter"
+                                                   Size="Size.Medium"
+                                                   Color="Color.Info"
+                                                   Href="@FormatSocialUrl("twitter.com", profile.Twitter)"
+                                                   Target="_blank" />
+                                }
+                                @if (!string.IsNullOrEmpty(profile.LinkedIn))
+                                {
+                                    <MudIconButton Icon="@Icons.Custom.Brands.LinkedIn"
+                                                   Size="Size.Medium"
+                                                   Color="Color.Primary"
+                                                   Href="@FormatSocialUrl("linkedin.com/in", profile.LinkedIn)"
+                                                   Target="_blank" />
+                                }
+                                @if (!string.IsNullOrEmpty(profile.GitHub))
+                                {
+                                    <MudIconButton Icon="@Icons.Custom.Brands.GitHub"
+                                                   Size="Size.Medium"
+                                                   Color="Color.Dark"
+                                                   Href="@FormatSocialUrl("github.com", profile.GitHub)"
+                                                   Target="_blank" />
+                                }
+                                @if (!string.IsNullOrEmpty(profile.Instagram))
+                                {
+                                    <MudIconButton Icon="@Icons.Custom.Brands.Instagram"
+                                                   Size="Size.Medium"
+                                                   Color="Color.Error"
+                                                   Href="@FormatSocialUrl("instagram.com", profile.Instagram)"
+                                                   Target="_blank" />
+                                }
+                                @if (!string.IsNullOrEmpty(profile.YouTube))
+                                {
+                                    <MudIconButton Icon="@Icons.Custom.Brands.YouTube"
+                                                   Size="Size.Medium"
+                                                   Color="Color.Error"
+                                                   Href="@FormatSocialUrl("youtube.com", profile.YouTube)"
+                                                   Target="_blank" />
+                                }
+                                @if (!string.IsNullOrEmpty(profile.TikTok))
+                                {
+                                    <MudIconButton Icon="@Icons.Custom.Brands.TikTok"
+                                                   Size="Size.Medium"
+                                                   Color="Color.Dark"
+                                                   Href="@FormatSocialUrl("tiktok.com", profile.TikTok)"
+                                                   Target="_blank" />
+                                }
+                            </MudStack>
+                        }
+                    </MudCardContent>
+
+                    @if (isOwnProfile)
+                    {
+                        <MudCardActions Class="justify-center pa-4">
+                            @if (isEditing)
+                            {
+                                <MudButton Variant="Variant.Text" OnClick="CancelEdit">Cancel</MudButton>
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveProfile" Disabled="saving">
+                                    @if (saving)
+                                    {
+                                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                    }
+                                    Save
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Edit"
+                                           OnClick="StartEdit">
+                                    Edit Profile
+                                </MudButton>
+                            }
+                        </MudCardActions>
+                    }
+                </MudCard>
+
+                @* Danger Zone - Delete Account *@
+                @if (isOwnProfile && !isEditing)
+                {
+                    <MudCard Class="mt-4" Style="border: 1px solid var(--mud-palette-error);">
+                        <MudCardContent>
+                            <MudText Typo="Typo.subtitle2" Color="Color.Error" Class="mb-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Class="mr-1" />
+                                Danger Zone
+                            </MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                                Once you delete your account, there is no going back. This action is permanent.
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Error"
+                                       Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.DeleteForever"
+                                       OnClick="ConfirmDeleteAccount">
+                                Delete Account
+                            </MudButton>
+                        </MudCardContent>
+                    </MudCard>
+                }
+            </MudItem>
+
+            @* Right Column - Edit Form or Info *@
+            <MudItem xs="12" md="8">
+                @if (isOwnProfile && isEditing)
+                {
+                    @* Edit Form *@
+                    <MudCard>
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Edit Profile</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudGrid Spacing="3">
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="editModel.DisplayName"
+                                                  Label="Display Name"
+                                                  Variant="Variant.Outlined"
+                                                  Placeholder="How you want to be called" />
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudTextField @bind-Value="editModel.Bio"
+                                                  Label="Bio"
+                                                  Variant="Variant.Outlined"
+                                                  Lines="3"
+                                                  Placeholder="Tell us about yourself..." />
+                                </MudItem>
+
+                                <MudItem xs="12">
+                                    <MudDivider Class="my-2" />
+                                    <MudText Typo="Typo.subtitle2" Class="mb-3">Social Networks</MudText>
+                                </MudItem>
+
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField @bind-Value="editModel.Website"
+                                                  Label="Website"
+                                                  Variant="Variant.Outlined"
+                                                  Placeholder="https://yourwebsite.com"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Language" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField @bind-Value="editModel.Twitter"
+                                                  Label="Twitter / X"
+                                                  Variant="Variant.Outlined"
+                                                  Placeholder="username"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Custom.Brands.Twitter" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField @bind-Value="editModel.LinkedIn"
+                                                  Label="LinkedIn"
+                                                  Variant="Variant.Outlined"
+                                                  Placeholder="username"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Custom.Brands.LinkedIn" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField @bind-Value="editModel.GitHub"
+                                                  Label="GitHub"
+                                                  Variant="Variant.Outlined"
+                                                  Placeholder="username"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Custom.Brands.GitHub" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField @bind-Value="editModel.Instagram"
+                                                  Label="Instagram"
+                                                  Variant="Variant.Outlined"
+                                                  Placeholder="username"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Custom.Brands.Instagram" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField @bind-Value="editModel.YouTube"
+                                                  Label="YouTube"
+                                                  Variant="Variant.Outlined"
+                                                  Placeholder="channel name or handle"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Custom.Brands.YouTube" />
+                                </MudItem>
+                                <MudItem xs="12" sm="6">
+                                    <MudTextField @bind-Value="editModel.TikTok"
+                                                  Label="TikTok"
+                                                  Variant="Variant.Outlined"
+                                                  Placeholder="username"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Custom.Brands.TikTok" />
+                                </MudItem>
+                            </MudGrid>
+                        </MudCardContent>
+                    </MudCard>
+                }
+                else
+                {
+                    @* Account Information *@
+                    <MudCard>
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">Account Information</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <tbody>
+                                    <tr>
+                                        <td style="width: 150px;"><strong>Email</strong></td>
+                                        <td>@profile.Email</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Display Name</strong></td>
+                                        <td>@(profile.DisplayName ?? "-")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Role</strong></td>
+                                        <td>@(profile.Role ?? "User")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Account Status</strong></td>
+                                        <td>
+                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Active</MudChip>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudCardContent>
+                    </MudCard>
+
+                    @if (isOwnProfile)
+                    {
+                        <MudCard Class="mt-4">
+                            <MudCardHeader>
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.h6">Security</MudText>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Lock">
+                                    Change Password
+                                </MudButton>
+                            </MudCardContent>
+                        </MudCard>
+
+                        @* Subscriptions Section *@
+                        <MudCard Class="mt-4">
+                            <MudCardHeader>
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.h6">My Subscriptions</MudText>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                @if (loadingSubscriptions)
+                                {
+                                    <MudProgressLinear Indeterminate="true" />
+                                }
+                                else if (!subscriptions.Any())
+                                {
+                                    <MudAlert Severity="Severity.Info" Dense="true">
+                                        You don't have any active subscriptions.
+                                        <MudLink Href="/channels" Class="ml-2">Browse channels</MudLink>
+                                    </MudAlert>
+                                }
+                                else
+                                {
+                                    <MudList T="UserSubscriptionDto" Dense="true">
+                                        @foreach (var sub in subscriptions)
+                                        {
+                                            <MudListItem>
+                                                <div class="d-flex justify-space-between align-center w-100">
+                                                    <div>
+                                                        <MudLink Href="@($"/content/channel/{sub.ChannelSlug}")" Typo="Typo.subtitle1">
+                                                            @sub.ChannelName
+                                                        </MudLink>
+                                                        <div class="d-flex align-center gap-2 mt-1">
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@sub.PlanName</MudChip>
+                                                            <MudChip T="string" Size="Size.Small" Color="@GetSubscriptionStatusColor(sub.Status)">
+                                                                @sub.Status
+                                                            </MudChip>
+                                                            @if (sub.ExpiresAt.HasValue)
+                                                            {
+                                                                var daysLeft = (sub.ExpiresAt.Value - DateTime.UtcNow).Days;
+                                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                                    @if (daysLeft > 0)
+                                                                    {
+                                                                        <text>@daysLeft days left</text>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <text>Expired</text>
+                                                                    }
+                                                                </MudText>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    @if (sub.Status == SubscriptionStatus.Active)
+                                                    {
+                                                        <MudButton Variant="Variant.Text"
+                                                                   Color="Color.Error"
+                                                                   Size="Size.Small"
+                                                                   OnClick="@(() => ConfirmCancelSubscription(sub))">
+                                                            Cancel
+                                                        </MudButton>
+                                                    }
+                                                </div>
+                                            </MudListItem>
+                                            <MudDivider />
+                                        }
+                                    </MudList>
+
+                                    <MudDivider Class="my-4" />
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               StartIcon="@Icons.Material.Filled.CreditCard"
+                                               OnClick="OpenStripePortal"
+                                               Disabled="openingPortal">
+                                        @if (openingPortal)
+                                        {
+                                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                        }
+                                        Manage Billing in Stripe
+                                    </MudButton>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+
+                        @* Purchased Courses Section *@
+                        <MudCard Class="mt-4">
+                            <MudCardHeader>
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.h6">My Courses</MudText>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                @if (loadingCourses)
+                                {
+                                    <MudProgressLinear Indeterminate="true" />
+                                }
+                                else if (!purchasedCourses.Any())
+                                {
+                                    <MudAlert Severity="Severity.Info" Dense="true">
+                                        You haven't purchased any courses yet.
+                                        <MudLink Href="/channels" Class="ml-2">Browse channels</MudLink>
+                                    </MudAlert>
+                                }
+                                else
+                                {
+                                    <MudList T="UserPurchasedCourseDto" Dense="true">
+                                        @foreach (var course in purchasedCourses)
+                                        {
+                                            <MudListItem>
+                                                <div class="d-flex justify-space-between align-center w-100">
+                                                    <div class="d-flex align-center gap-3">
+                                                        @if (!string.IsNullOrEmpty(course.MainPicture))
+                                                        {
+                                                            <MudImage Src="@course.MainPicture" Width="60" Height="40" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Large" Color="Color.Primary" />
+                                                        }
+                                                        <div>
+                                                            <MudLink Href="@($"/content/courses/{course.Slug}")" Typo="Typo.subtitle1">
+                                                                @course.Title
+                                                            </MudLink>
+                                                            <div class="d-flex align-center gap-2 mt-1">
+                                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@course.ChannelName</MudText>
+                                                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@course.ChapterCount chapters</MudText>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <MudButton Variant="Variant.Filled"
+                                                               Color="Color.Primary"
+                                                               Size="Size.Small"
+                                                               Href="@($"/content/courses/{course.Slug}")">
+                                                        View Course
+                                                    </MudButton>
+                                                </div>
+                                            </MudListItem>
+                                            <MudDivider />
+                                        }
+                                    </MudList>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    }
+                }
+            </MudItem>
+        </MudGrid>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">User not found.</MudAlert>
+    }
+</MudContainer>
+}
+
+<style>
+    .profile-picture-container {
+        position: relative;
+        display: inline-block;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public Guid? UserId { get; set; }
+
+    private UserInfo? profile;
+    private bool loading = true;
+    private bool isEditing = false;
+    private bool saving = false;
+    private bool uploadingImage = false;
+    private bool isAuthenticated = false;
+    private bool isOwnProfile => !UserId.HasValue;
+    private bool loadingSubscriptions = false;
+    private bool loadingCourses = false;
+    private bool openingPortal = false;
+    private List<UserSubscriptionDto> subscriptions = new();
+    private List<UserPurchasedCourseDto> purchasedCourses = new();
+
+    private ProfileEditModel editModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
+
+        if (!isOwnProfile || isAuthenticated)
+        {
+            await LoadProfile();
+            if (isOwnProfile)
+            {
+                await LoadSubscriptions();
+                await LoadPurchasedCourses();
+            }
+        }
+        else
+        {
+            loading = false;
+        }
+    }
+
+    private async Task LoadPurchasedCourses()
+    {
+        loadingCourses = true;
+        try
+        {
+            purchasedCourses = await Api.GetMyPurchasedCoursesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading courses: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loadingCourses = false;
+        }
+    }
+
+    private async Task LoadSubscriptions()
+    {
+        loadingSubscriptions = true;
+        try
+        {
+            subscriptions = await Api.GetMySubscriptionsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading subscriptions: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loadingSubscriptions = false;
+        }
+    }
+
+    private Color GetSubscriptionStatusColor(SubscriptionStatus status) => status switch
+    {
+        SubscriptionStatus.Active => Color.Success,
+        SubscriptionStatus.Cancelled => Color.Warning,
+        SubscriptionStatus.Expired => Color.Error,
+        SubscriptionStatus.Pending => Color.Info,
+        _ => Color.Default
+    };
+
+    private async Task ConfirmCancelSubscription(UserSubscriptionDto subscription)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Cancel Subscription",
+            $"Are you sure you want to cancel your subscription to {subscription.ChannelName}? You will lose access to subscriber-only content.",
+            yesText: "Cancel Subscription",
+            cancelText: "Keep Subscription");
+
+        if (result == true)
+        {
+            var cancelled = await Api.CancelMySubscriptionAsync(subscription.Id);
+            if (cancelled)
+            {
+                Snackbar.Add("Subscription cancelled", Severity.Success);
+                await LoadSubscriptions();
+            }
+            else
+            {
+                Snackbar.Add("Failed to cancel subscription", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenStripePortal()
+    {
+        openingPortal = true;
+        StateHasChanged();
+
+        try
+        {
+            var returnUrl = Nav.Uri;
+            var portal = await Api.CreatePortalSessionAsync(returnUrl);
+
+            if (portal != null)
+            {
+                Nav.NavigateTo(portal.Url, forceLoad: true);
+            }
+            else
+            {
+                Snackbar.Add("Unable to open billing portal. You may not have any paid subscriptions.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            openingPortal = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadProfile()
+    {
+        loading = true;
+        try
+        {
+            if (UserId.HasValue)
+            {
+                profile = await Api.GetPublicProfileAsync(UserId.Value);
+            }
+            else
+            {
+                profile = await Api.GetCurrentUserAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading profile: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void StartEdit()
+    {
+        if (profile == null) return;
+
+        editModel = new ProfileEditModel
+        {
+            DisplayName = profile.DisplayName,
+            Bio = profile.Bio,
+            ProfilePicture = profile.ProfilePicture,
+            Twitter = profile.Twitter,
+            LinkedIn = profile.LinkedIn,
+            GitHub = profile.GitHub,
+            Instagram = profile.Instagram,
+            YouTube = profile.YouTube,
+            TikTok = profile.TikTok,
+            Website = profile.Website
+        };
+        isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+    }
+
+    private async Task SaveProfile()
+    {
+        saving = true;
+        try
+        {
+            var request = new UpdateProfileRequest(
+                editModel.DisplayName,
+                editModel.Bio,
+                editModel.ProfilePicture,
+                editModel.Twitter,
+                editModel.LinkedIn,
+                editModel.GitHub,
+                editModel.Instagram,
+                editModel.YouTube,
+                editModel.TikTok,
+                editModel.Website
+            );
+
+            var result = await Api.UpdateProfileAsync(request);
+            if (result != null)
+            {
+                profile = result;
+                isEditing = false;
+                Snackbar.Add("Profile updated successfully", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to update profile", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task OnProfilePictureSelected(IBrowserFile file)
+    {
+        if (file == null) return;
+
+        uploadingImage = true;
+        StateHasChanged();
+
+        try
+        {
+            var imageUrl = await Api.UploadImageAsync(file);
+            if (imageUrl != null)
+            {
+                editModel.ProfilePicture = imageUrl;
+                Snackbar.Add("Photo uploaded", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Failed to upload photo", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            uploadingImage = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetInitials()
+    {
+        if (!string.IsNullOrEmpty(profile?.DisplayName))
+            return profile.DisplayName.Substring(0, 1).ToUpper();
+        if (!string.IsNullOrEmpty(profile?.Email))
+            return profile.Email.Substring(0, 1).ToUpper();
+        return "U";
+    }
+
+    private string GetImageUrl(string? path)
+    {
+        if (string.IsNullOrEmpty(path)) return "";
+        if (path.StartsWith("http")) return path;
+        return $"https://localhost:7451{path}";
+    }
+
+    private bool HasSocialLinks()
+    {
+        return !string.IsNullOrEmpty(profile?.Website) ||
+               !string.IsNullOrEmpty(profile?.Twitter) ||
+               !string.IsNullOrEmpty(profile?.LinkedIn) ||
+               !string.IsNullOrEmpty(profile?.GitHub) ||
+               !string.IsNullOrEmpty(profile?.Instagram) ||
+               !string.IsNullOrEmpty(profile?.YouTube) ||
+               !string.IsNullOrEmpty(profile?.TikTok);
+    }
+
+    private string FormatUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return "";
+        if (url.StartsWith("http")) return url;
+        return $"https://{url}";
+    }
+
+    private string FormatSocialUrl(string domain, string username)
+    {
+        if (string.IsNullOrEmpty(username)) return "";
+        username = username.TrimStart('@');
+        if (username.StartsWith("http")) return username;
+        return $"https://{domain}/{username}";
+    }
+
+    private async Task ConfirmDeleteAccount()
+    {
+        var parameters = new DialogParameters<ConfirmDialog>
+        {
+            { x => x.ContentText, "Are you sure you want to delete your account? This action cannot be undone. All your data, subscriptions, and purchases will be permanently deleted." },
+            { x => x.ButtonText, "Delete Account" },
+            { x => x.Color, Color.Error }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Delete Account", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await DeleteAccount();
+        }
+    }
+
+    private async Task DeleteAccount()
+    {
+        try
+        {
+            var success = await Api.DeleteAccountAsync();
+            if (success)
+            {
+                Snackbar.Add("Your account has been deleted", Severity.Success);
+                var authProvider = (Pow.Web.Services.AuthStateProvider)AuthStateProvider;
+                await authProvider.LogoutAsync();
+                Nav.NavigateTo("/", forceLoad: true);
+            }
+            else
+            {
+                Snackbar.Add("Failed to delete account. Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private class ProfileEditModel
+    {
+        public string? DisplayName { get; set; }
+        public string? Bio { get; set; }
+        public string? ProfilePicture { get; set; }
+        public string? Twitter { get; set; }
+        public string? LinkedIn { get; set; }
+        public string? GitHub { get; set; }
+        public string? Instagram { get; set; }
+        public string? YouTube { get; set; }
+        public string? TikTok { get; set; }
+        public string? Website { get; set; }
+    }
+}

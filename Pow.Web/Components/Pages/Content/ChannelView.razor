@@ -1,0 +1,562 @@
+@page "/content/channel/{Slug}"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>@(channel?.Name ?? "Channel") - Pow</PageTitle>
+
+@if (loading)
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="mb-4 rounded-lg" />
+        <MudSkeleton Width="40%" Height="42px" Class="mb-2" />
+        <MudSkeleton Width="60%" Height="24px" Class="mb-6" />
+        <MudGrid>
+            @for (int i = 0; i < 3; i++)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="200px" Class="rounded-lg" />
+                </MudItem>
+            }
+        </MudGrid>
+    </MudContainer>
+}
+else if (channel == null)
+{
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="py-8 text-center">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Class="mb-4" />
+        <MudText Typo="Typo.h5">Channel not found</MudText>
+        <MudText Typo="Typo.body1" Class="mud-text-secondary mb-4">
+            The channel you're looking for doesn't exist.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/channels">
+            Browse Channels
+        </MudButton>
+    </MudContainer>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="py-8">
+        @* Channel Header *@
+        <MudPaper Class="pa-6 mb-6 rounded-lg" Elevation="0" Style="background: linear-gradient(135deg, var(--mud-palette-primary) 0%, var(--mud-palette-primary-darken) 100%);">
+            <div class="d-flex flex-wrap gap-4 align-center">
+                @if (!string.IsNullOrEmpty(channel.MainPicture))
+                {
+                    <MudAvatar Size="Size.Large" Style="width: 100px; height: 100px;">
+                        <MudImage Src="@channel.MainPicture" Alt="@channel.Name" />
+                    </MudAvatar>
+                }
+                else
+                {
+                    <MudAvatar Size="Size.Large" Color="Color.Secondary" Style="width: 100px; height: 100px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Tv" Size="Size.Large" />
+                    </MudAvatar>
+                }
+                <div class="flex-grow-1">
+                    <MudText Typo="Typo.h4" Style="color: white;">@channel.Name</MudText>
+                    @if (!string.IsNullOrEmpty(channel.Description))
+                    {
+                        <MudText Typo="Typo.body1" Style="color: rgba(255,255,255,0.8);" Class="mt-2">
+                            @channel.Description
+                        </MudText>
+                    }
+                    <div class="d-flex gap-4 mt-3 align-center">
+                        <MudChip T="string" Size="Size.Small" Style="background: rgba(255,255,255,0.2); color: white;">
+                            @channel.CourseCount Courses
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Style="background: rgba(255,255,255,0.2); color: white;">
+                            @channel.ContentCount Contents
+                        </MudChip>
+                        <MudSpacer />
+                        @if (_isAuthenticated)
+                        {
+                            @if (_isFollowing)
+                            {
+                                <MudButton Variant="Variant.Outlined"
+                                           StartIcon="@Icons.Material.Filled.Check"
+                                           Style="color: white; border-color: rgba(255,255,255,0.5);"
+                                           OnClick="ToggleFollow"
+                                           Disabled="_togglingFollow">
+                                    Following
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Secondary"
+                                           StartIcon="@Icons.Material.Filled.PersonAdd"
+                                           OnClick="ToggleFollow"
+                                           Disabled="_togglingFollow">
+                                    Follow
+                                </MudButton>
+                            }
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Secondary"
+                                       StartIcon="@Icons.Material.Filled.PersonAdd"
+                                       Href="@($"/login?returnUrl=/content/channel/{Slug}")">
+                                Follow
+                            </MudButton>
+                        }
+                    </div>
+                </div>
+            </div>
+        </MudPaper>
+
+        @* Subscription Plans Section *@
+        @if (plans.Any(p => p.Price > 0))
+        {
+            <MudText Typo="Typo.h5" Class="mb-4">Subscription Plans</MudText>
+            <MudGrid Spacing="4" Class="mb-8">
+                @foreach (var plan in plans.Where(p => p.IsActive).OrderBy(p => p.SortOrder))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard Class="h-100 plan-card" Elevation="2">
+                            <MudCardContent Class="pa-6">
+                                <MudText Typo="Typo.h6" Class="mb-2">@plan.Name</MudText>
+                                @if (!string.IsNullOrEmpty(plan.Description))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+                                        @plan.Description
+                                    </MudText>
+                                }
+                                <div class="d-flex align-baseline gap-1 mb-4">
+                                    @if (plan.Price > 0)
+                                    {
+                                        <MudText Typo="Typo.h4" Color="Color.Primary">@plan.Currency @plan.Price.ToString("N2")</MudText>
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">/@GetIntervalLabel(plan.Interval)</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.h4" Color="Color.Success">Free</MudText>
+                                    }
+                                </div>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @plan.SubscriberCount subscribers
+                                </MudText>
+                            </MudCardContent>
+                            <MudCardActions Class="pa-4 pt-0">
+                                @if (plan.Price > 0)
+                                {
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="Color.Primary"
+                                               FullWidth="true"
+                                               Href="@($"/subscription/checkout/{plan.Id}")"
+                                               StartIcon="@Icons.Material.Filled.CreditCard">
+                                        Subscribe
+                                    </MudButton>
+                                }
+                                else
+                                {
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Primary"
+                                               FullWidth="true"
+                                               Disabled="true">
+                                        Free Access
+                                    </MudButton>
+                                }
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @* Upcoming Events Section *@
+        @if (events.Any())
+        {
+            <MudText Typo="Typo.h5" Class="mb-4">Upcoming Events</MudText>
+            <MudStack Spacing="3" Class="mb-8">
+                @foreach (var evt in events.Take(5))
+                {
+                    <MudPaper Class="pa-4 rounded-lg event-card" Elevation="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="3">
+                            <MudPaper Class="pa-3 text-center rounded-lg" Elevation="0"
+                                      Style="background: var(--mud-palette-primary); color: white; min-width: 70px;">
+                                <MudText Typo="Typo.h5" Style="line-height: 1;">@evt.EventDate.Day</MudText>
+                                <MudText Typo="Typo.caption">@evt.EventDate.ToString("MMM")</MudText>
+                                <MudText Typo="Typo.caption">@evt.EventDate.ToString("yyyy")</MudText>
+                            </MudPaper>
+                            <MudStack Spacing="1" Class="flex-grow-1">
+                                <MudText Typo="Typo.h6">@evt.Title</MudText>
+                                @if (!string.IsNullOrEmpty(evt.Description))
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@evt.Description</MudText>
+                                }
+                                <MudStack Row="true" Spacing="3" Class="mt-2 flex-wrap">
+                                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Schedule" Color="Color.Default">
+                                        @evt.EventDate.ToString("h:mm tt")
+                                    </MudChip>
+                                    @if (!string.IsNullOrEmpty(evt.Location))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.LocationOn" Color="Color.Info">
+                                            @evt.Location
+                                        </MudChip>
+                                    }
+                                    @if (!string.IsNullOrEmpty(evt.ZoomLink))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.VideoCall" Color="Color.Success"
+                                                 Href="@evt.ZoomLink" Target="_blank">
+                                            Zoom
+                                        </MudChip>
+                                    }
+                                    @if (!string.IsNullOrEmpty(evt.StreamingLink))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.LiveTv" Color="Color.Error"
+                                                 Href="@evt.StreamingLink" Target="_blank">
+                                            Watch Live
+                                        </MudChip>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+        }
+
+        @* Courses Section *@
+        @if (courses.Any())
+        {
+            <MudText Typo="Typo.h5" Class="mb-4">Courses</MudText>
+            <MudGrid Spacing="4" Class="mb-8">
+                @foreach (var course in courses)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard Class="h-100 course-card" Elevation="2">
+                            @if (!string.IsNullOrEmpty(course.MainPicture))
+                            {
+                                <MudCardMedia Image="@course.MainPicture" Height="160" />
+                            }
+                            else
+                            {
+                                <div style="height: 160px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center;">
+                                    <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Large" Style="color: white;" />
+                                </div>
+                            }
+                            <MudCardContent>
+                                <div class="d-flex justify-space-between align-center mb-2">
+                                    <MudChip T="string" Size="Size.Small" Color="@GetAccessColor(course.AccessType)">
+                                        @GetAccessLabel(course.AccessType)
+                                    </MudChip>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @course.ChapterCount chapters
+                                    </MudText>
+                                </div>
+                                <MudText Typo="Typo.h6">@course.Title</MudText>
+                                @if (!string.IsNullOrEmpty(course.Description))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2" Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                        @course.Description
+                                    </MudText>
+                                }
+                            </MudCardContent>
+                            <MudCardActions>
+                                <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                           Href="@($"/content/course/{course.Slug}")">
+                                    View Course
+                                </MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @* Recent Content Section *@
+        @if (contents.Any())
+        {
+            <MudText Typo="Typo.h5" Class="mb-4">Recent Content</MudText>
+            <MudGrid Spacing="4">
+                @foreach (var content in contents.Take(6))
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard Class="h-100 content-card" Elevation="2">
+                            @if (!string.IsNullOrEmpty(content.MainPicture))
+                            {
+                                <MudCardMedia Image="@content.MainPicture" Height="140" />
+                            }
+                            <MudCardContent>
+                                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">@content.Title</MudText>
+                                @if (!string.IsNullOrEmpty(content.Description))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1" Style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                        @content.Description
+                                    </MudText>
+                                }
+                                @if (content.PublishedAt.HasValue)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">
+                                        @content.PublishedAt.Value.ToString("MMM dd, yyyy")
+                                    </MudText>
+                                }
+                            </MudCardContent>
+                            <MudCardActions>
+                                <MudButton Variant="Variant.Text" Color="Color.Primary"
+                                           Href="@($"/read/{content.Slug}")">
+                                    Read
+                                </MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @if (!courses.Any() && !contents.Any())
+        {
+            <MudAlert Severity="Severity.Info">
+                This channel doesn't have any published content yet.
+            </MudAlert>
+        }
+
+    </MudContainer>
+
+    @* Floating Contact Button *@
+    @if (channel.InboxVisibility != InboxVisibility.Disabled)
+    {
+        <MudFab Color="Color.Primary"
+                StartIcon="@Icons.Material.Filled.Message"
+                Style="position: fixed; bottom: 24px; right: 24px; z-index: 1000;"
+                OnClick="() => _showContactDialog = true" />
+    }
+}
+
+@* Contact Dialog *@
+<MudDialog @bind-Visible="_showContactDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true })">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Email" />
+            <MudText Typo="Typo.h6">Send a Message</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (channel?.InboxVisibility == InboxVisibility.SubscribersOnly)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-4">
+                Only subscribers can send messages to this channel.
+            </MudAlert>
+        }
+        <MudForm @ref="_contactForm" @bind-IsValid="_contactValid">
+            <MudStack Spacing="3">
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField @bind-Value="_contactName"
+                                  Label="Name"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  RequiredError="Required"
+                                  Style="flex: 1;" />
+                    <MudTextField @bind-Value="_contactEmail"
+                                  Label="Email"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  RequiredError="Required"
+                                  InputType="InputType.Email"
+                                  Style="flex: 1;" />
+                </MudStack>
+                <MudTextField @bind-Value="_contactSubject"
+                              Label="Subject"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Required" />
+                <MudTextField @bind-Value="_contactMessage"
+                              Label="Message"
+                              Variant="Variant.Outlined"
+                              Lines="5"
+                              Required="true"
+                              RequiredError="Required"
+                              Placeholder="Write your message here..." />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseContactDialog" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(!_contactValid || _sendingMessage)"
+                   OnClick="SendMessage">
+            @if (_sendingMessage)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Send
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<style>
+    .course-card, .content-card, .event-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .course-card:hover, .content-card:hover, .plan-card:hover, .event-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+
+    .plan-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = "";
+
+    private ChannelDto? channel;
+    private List<CourseDto> courses = new();
+    private List<ContentListDto> contents = new();
+    private List<ChannelPlanDto> plans = new();
+    private List<ChannelEventDto> events = new();
+    private bool loading = true;
+
+    // Follow state
+    private bool _isAuthenticated;
+    private bool _isFollowing;
+    private bool _togglingFollow;
+
+    // Contact dialog
+    private bool _showContactDialog;
+    private MudForm? _contactForm;
+    private bool _contactValid;
+    private string _contactName = "";
+    private string _contactEmail = "";
+    private string _contactSubject = "";
+    private string _contactMessage = "";
+    private bool _sendingMessage;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+
+        // Check authentication
+        var authState = await AuthState.GetAuthenticationStateAsync();
+        _isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
+
+        channel = await Api.GetChannelBySlugAsync(Slug);
+
+        if (channel != null)
+        {
+            var coursesTask = Api.GetPublicCoursesAsync(channel.Id);
+            var contentsTask = Api.GetContentsByChannelAsync(Slug);
+            var plansTask = Api.GetChannelPlansAsync(channel.Id);
+            var eventsTask = Api.GetChannelEventsAsync(channel.Id);
+
+            await Task.WhenAll(coursesTask, contentsTask, plansTask, eventsTask);
+
+            courses = await coursesTask;
+            contents = await contentsTask;
+            plans = await plansTask;
+            events = (await eventsTask)
+                .Where(e => e.IsActive && e.EventDate >= DateTime.Today.AddDays(-1))
+                .OrderBy(e => e.EventDate)
+                .ToList();
+
+            // Check if following
+            if (_isAuthenticated)
+            {
+                _isFollowing = await Api.IsFollowingChannelAsync(channel.Id);
+            }
+        }
+
+        loading = false;
+    }
+
+    private async Task ToggleFollow()
+    {
+        if (channel == null) return;
+
+        _togglingFollow = true;
+
+        if (_isFollowing)
+        {
+            var success = await Api.UnfollowChannelAsync(channel.Id);
+            if (success)
+            {
+                _isFollowing = false;
+                Snackbar.Add($"Unfollowed {channel.Name}", Severity.Info);
+            }
+        }
+        else
+        {
+            var success = await Api.FollowChannelAsync(channel.Id);
+            if (success)
+            {
+                _isFollowing = true;
+                Snackbar.Add($"Now following {channel.Name}!", Severity.Success);
+            }
+        }
+
+        _togglingFollow = false;
+    }
+
+    private void CloseContactDialog()
+    {
+        _showContactDialog = false;
+        _contactName = "";
+        _contactEmail = "";
+        _contactSubject = "";
+        _contactMessage = "";
+    }
+
+    private async Task SendMessage()
+    {
+        if (_contactForm == null || channel == null) return;
+        await _contactForm.Validate();
+        if (!_contactValid) return;
+
+        _sendingMessage = true;
+
+        var dto = new SendChannelMessageDto(
+            channel.Id,
+            _contactName,
+            _contactEmail,
+            _contactSubject,
+            _contactMessage
+        );
+
+        var success = await Api.SendChannelMessageAsync(dto);
+
+        _sendingMessage = false;
+
+        if (success)
+        {
+            Snackbar.Add("Message sent!", Severity.Success);
+            CloseContactDialog();
+        }
+        else
+        {
+            Snackbar.Add("Failed to send message", Severity.Error);
+        }
+    }
+
+    private Color GetAccessColor(CourseAccessType accessType) => accessType switch
+    {
+        CourseAccessType.Free => Color.Success,
+        CourseAccessType.SubscribersOnly => Color.Warning,
+        CourseAccessType.SpecificPlan => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetAccessLabel(CourseAccessType accessType) => accessType switch
+    {
+        CourseAccessType.Free => "Free",
+        CourseAccessType.SubscribersOnly => "Subscribers",
+        CourseAccessType.SpecificPlan => "Premium",
+        _ => "Unknown"
+    };
+
+    private string GetIntervalLabel(string interval) => interval switch
+    {
+        "monthly" => "month",
+        "yearly" => "year",
+        "lifetime" => "one-time",
+        _ => interval
+    };
+}

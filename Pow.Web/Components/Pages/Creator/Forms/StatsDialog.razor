@@ -1,0 +1,148 @@
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" />
+            Form Statistics
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="4">
+            @* Overview *@
+            <MudPaper Elevation="1" Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-3">Overview</MudText>
+                <MudGrid>
+                    <MudItem xs="4">
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@Stats.TotalResponses</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Total Responses</MudText>
+                        </MudStack>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.h4" Color="Color.Success">@Stats.CompletedResponses</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Completed</MudText>
+                        </MudStack>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudStack AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.h4" Color="Color.Warning">@Stats.InProgressResponses</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">In Progress</MudText>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            @* Quiz Stats *@
+            @if (Stats.FormType == FormType.Quiz)
+            {
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">Quiz Performance</MudText>
+                    <MudGrid>
+                        <MudItem xs="3">
+                            <MudStack AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.h4" Color="Color.Info">
+                                    @(Stats.AverageScore?.ToString("F1") ?? "-")%
+                                </MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Avg Score</MudText>
+                            </MudStack>
+                        </MudItem>
+                        <MudItem xs="3">
+                            <MudStack AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.h4" Color="Color.Success">@(Stats.PassedCount ?? 0)</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Passed</MudText>
+                            </MudStack>
+                        </MudItem>
+                        <MudItem xs="3">
+                            <MudStack AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.h4" Color="Color.Error">@(Stats.FailedCount ?? 0)</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Failed</MudText>
+                            </MudStack>
+                        </MudItem>
+                        <MudItem xs="3">
+                            <MudStack AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.h4" Color="Color.Primary">
+                                    @(Stats.PassRate?.ToString("F1") ?? "-")%
+                                </MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Pass Rate</MudText>
+                            </MudStack>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            }
+
+            @* Question Stats *@
+            <MudText Typo="Typo.h6">Question Breakdown</MudText>
+
+            @foreach (var question in Stats.QuestionStats)
+            {
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary">
+                                @GetQuestionTypeLabel(question.QuestionType)
+                            </MudChip>
+                            <MudText Typo="Typo.body1" Class="font-weight-medium">@question.Text</MudText>
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                            @question.TotalAnswers answers
+                        </MudText>
+
+                        @if (question.QuestionType == QuestionType.OpenText)
+                        {
+                            @if (question.SampleTextAnswers?.Any() == true)
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary mt-2">Sample answers:</MudText>
+                                @foreach (var sample in question.SampleTextAnswers.Take(5))
+                                {
+                                    <MudText Typo="Typo.body2" Class="ml-2">• @sample</MudText>
+                                }
+                            }
+                        }
+                        else if (question.OptionStats?.Any() == true)
+                        {
+                            <MudDivider Class="my-2" />
+                            @foreach (var option in question.OptionStats)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudText Typo="Typo.body2" Style="width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                                        @option.Text
+                                    </MudText>
+                                    <MudProgressLinear Value="@option.SelectionPercentage"
+                                                       Color="Color.Primary"
+                                                       Style="flex: 1;" />
+                                    <MudText Typo="Typo.caption" Style="width: 80px; text-align: right;">
+                                        @option.SelectionCount (@option.SelectionPercentage.ToString("F0")%)
+                                    </MudText>
+                                </MudStack>
+                            }
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public FormStatsDto Stats { get; set; } = null!;
+
+    private void Close() => MudDialog.Close();
+
+    private string GetQuestionTypeLabel(QuestionType type) => type switch
+    {
+        QuestionType.OpenText => "Text",
+        QuestionType.SingleChoice => "Single",
+        QuestionType.MultipleChoice => "Multiple",
+        _ => "Unknown"
+    };
+}

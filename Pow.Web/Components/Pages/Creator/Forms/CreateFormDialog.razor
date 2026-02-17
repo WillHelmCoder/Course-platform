@@ -1,0 +1,146 @@
+@using Pow.Domain.DTOs
+@using Pow.Domain.Enums
+@using Pow.Web.Services
+@inject ApiService Api
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
+            New Form
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="model.Title"
+                          Label="Title"
+                          Variant="Variant.Outlined"
+                          Required="true" />
+
+            <MudTextField @bind-Value="model.Description"
+                          Label="Description"
+                          Variant="Variant.Outlined"
+                          Lines="2" />
+
+            <MudSelect T="FormType"
+                       Label="Type"
+                       @bind-Value="model.FormType"
+                       Variant="Variant.Outlined">
+                <MudSelectItem Value="FormType.Survey">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Poll" Size="Size.Small" />
+                        <span>Survey (no scoring)</span>
+                    </MudStack>
+                </MudSelectItem>
+                <MudSelectItem Value="FormType.Quiz">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Quiz" Size="Size.Small" />
+                        <span>Quiz (with scoring)</span>
+                    </MudStack>
+                </MudSelectItem>
+            </MudSelect>
+
+            @if (model.FormType == FormType.Quiz)
+            {
+                <MudNumericField @bind-Value="model.PassingScore"
+                                 Label="Passing Score (%)"
+                                 Variant="Variant.Outlined"
+                                 Min="0"
+                                 Max="100"
+                                 Adornment="Adornment.End"
+                                 AdornmentText="%" />
+            }
+
+            <MudSelect T="FormTrigger"
+                       Label="Trigger"
+                       @bind-Value="model.Trigger"
+                       Variant="Variant.Outlined">
+                <MudSelectItem Value="FormTrigger.Manual">Manual (share link)</MudSelectItem>
+                <MudSelectItem Value="FormTrigger.AfterRegistration">After Registration</MudSelectItem>
+                <MudSelectItem Value="FormTrigger.AfterCourseComplete">After Course Complete</MudSelectItem>
+            </MudSelect>
+
+            @if (model.Trigger == FormTrigger.AfterCourseComplete)
+            {
+                <MudSelect T="Guid?"
+                           Label="Trigger Course"
+                           @bind-Value="model.TriggerCourseId"
+                           Variant="Variant.Outlined">
+                    @foreach (var course in courses)
+                    {
+                        <MudSelectItem Value="@((Guid?)course.Id)">@course.Title</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="Submit"
+                   Disabled="saving || string.IsNullOrWhiteSpace(model.Title)">
+            @if (saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public Guid ChannelId { get; set; }
+
+    private CreateFormModel model = new();
+    private List<CourseDto> courses = new();
+    private bool saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        courses = await Api.GetAllCoursesAsync(ChannelId);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(model.Title))
+            return;
+
+        saving = true;
+
+        var dto = new CreateFormDto(
+            ChannelId,
+            model.Title,
+            model.Description,
+            model.FormType,
+            model.Trigger,
+            model.TriggerCourseId,
+            model.FormType == FormType.Quiz ? model.PassingScore : null
+        );
+
+        var result = await Api.CreateFormAsync(dto);
+
+        saving = false;
+
+        if (result != null)
+        {
+            MudDialog.Close(DialogResult.Ok(result));
+        }
+    }
+
+    private class CreateFormModel
+    {
+        public string Title { get; set; } = "";
+        public string? Description { get; set; }
+        public FormType FormType { get; set; } = FormType.Survey;
+        public FormTrigger Trigger { get; set; } = FormTrigger.Manual;
+        public Guid? TriggerCourseId { get; set; }
+        public int? PassingScore { get; set; } = 70;
+    }
+}

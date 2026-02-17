@@ -1,0 +1,175 @@
+@page "/my-plan"
+@using Microsoft.AspNetCore.Authorization
+@using MudBlazor
+@using Pow.Domain.DTOs
+@attribute [Authorize]
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+
+<PageTitle>My Plan</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="py-8">
+    <MudText Typo="Typo.h4" Class="mb-6">My Subscription</MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_currentPlan == null)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            You don't have an active subscription.
+        </MudAlert>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/plans">
+            Choose a Plan
+        </MudButton>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudCard>
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudText Typo="Typo.h5">@_currentPlan.Name</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                            </MudStack>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+                            @_currentPlan.Description
+                        </MudText>
+
+                        <MudDivider Class="my-4" />
+
+                        <MudGrid>
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Price</MudText>
+                                <MudText Typo="Typo.h6">
+                                    @if (_currentPlan.Price == 0)
+                                    {
+                                        <span>Free</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@_currentPlan.Currency @_currentPlan.Price.ToString("N2")/@_currentPlan.Interval</span>
+                                    }
+                                </MudText>
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">User Limit</MudText>
+                                <MudText Typo="Typo.h6">
+                                    @(_currentPlan.MaxUsers == 0 ? "Unlimited" : _currentPlan.MaxUsers.ToString())
+                                </MudText>
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_currentPlan.Features.Any())
+                        {
+                            <MudDivider Class="my-4" />
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">Included Features</MudText>
+                            <MudList T="string" Dense="true">
+                                @foreach (var feature in _currentPlan.Features)
+                                {
+                                    <MudListItem T="string" Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                                        @feature
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        }
+                    </MudCardContent>
+                    <MudCardActions Class="pa-4">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ChangePlan">
+                            Change Plan
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <MudText Typo="Typo.h6" Class="mb-3">Plan Status</MudText>
+                    <MudStack Spacing="3">
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Status</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success">Active</MudChip>
+                        </div>
+                        <div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Billing</MudText>
+                            <MudText Typo="Typo.body1">
+                                @if (_currentPlan?.Price == 0)
+                                {
+                                    <span>Free forever</span>
+                                }
+                                else
+                                {
+                                    <span>@_currentPlan?.Interval billing</span>
+                                }
+                            </MudText>
+                        </div>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private PlanDto? _currentPlan;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _currentPlan = await Api.GetMyPlanAsync();
+        }
+        catch
+        {
+            // Handle error silently
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ChangePlan()
+    {
+        var plans = await Api.GetPlansAsync();
+        if (!plans.Any())
+        {
+            Snackbar.Add("No other plans available", Severity.Info);
+            return;
+        }
+
+        var parameters = new DialogParameters
+        {
+            { "Plans", plans },
+            { "CurrentPlanId", _currentPlan?.Id }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        var dialog = await Dialog.ShowAsync<Pow.Web.Components.Pages.Admin.SelectPlanDialog>("Change Plan", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled && result.Data is Guid selectedPlanId)
+        {
+            var success = await Api.SelectPlanAsync(selectedPlanId);
+            if (success)
+            {
+                Snackbar.Add("Plan changed successfully!", Severity.Success);
+                _currentPlan = await Api.GetMyPlanAsync();
+                StateHasChanged();
+            }
+            else
+            {
+                Snackbar.Add("Failed to change plan", Severity.Error);
+            }
+        }
+    }
+}
