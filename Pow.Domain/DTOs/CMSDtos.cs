@@ -354,6 +354,38 @@ public record FeedItemDto(
     string? AuthorProfilePicture
 );
 
+// ===== CONTENT READ =====
+public record ContentReadStatusDto(
+    Guid ContentId,
+    bool IsRead,
+    DateTime? ReadAt
+);
+
+public record CourseProgressDto(
+    Guid CourseId,
+    List<ChapterProgressDto> Chapters
+);
+
+public record ChapterProgressDto(
+    Guid ChapterId,
+    string Title,
+    string? Description,
+    int SortOrder,
+    int TotalContents,
+    int ReadContents,
+    double ProgressPercent,
+    List<ContentProgressDto> Contents
+);
+
+public record ContentProgressDto(
+    Guid Id,
+    string Title,
+    string? Description,
+    string? MainPicture,
+    string Slug,
+    bool IsRead
+);
+
 // ===== VIDEO =====
 public record VideoUploadResponse(
     string VideoUrl,

@@ -36,6 +36,7 @@ public class AppDbContext : DbContext
     public DbSet<FormAnswerOption> FormAnswerOptions { get; set; }
     public DbSet<FormResponse> FormResponses { get; set; }
     public DbSet<FormResponseAnswer> FormResponseAnswers { get; set; }
+    public DbSet<ContentRead> ContentReads { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -241,6 +242,23 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.SelectedOptionId)
                   .OnDelete(DeleteBehavior.NoAction);
+        });
+
+        // ContentRead configuration
+        modelBuilder.Entity<ContentRead>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.UserId, e.ContentId }).IsUnique();
+
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Content)
+                  .WithMany()
+                  .HasForeignKey(e => e.ContentId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

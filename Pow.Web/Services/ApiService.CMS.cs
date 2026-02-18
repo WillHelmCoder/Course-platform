@@ -774,6 +774,35 @@ public partial class ApiService
         return response.IsSuccessStatusCode;
     }
 
+    // ===== CONTENT READ =====
+
+    public async Task<ContentReadStatusDto?> ToggleContentReadAsync(Guid contentId)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _http.PostAsync($"api/cms/user/contents/{contentId}/toggle-read", null);
+        if (response.IsSuccessStatusCode)
+            return await response.Content.ReadFromJsonAsync<ContentReadStatusDto>();
+        return null;
+    }
+
+    public async Task<ContentReadStatusDto?> GetContentReadStatusAsync(Guid contentId)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _http.GetAsync($"api/cms/user/contents/{contentId}/read-status");
+        if (response.IsSuccessStatusCode)
+            return await response.Content.ReadFromJsonAsync<ContentReadStatusDto>();
+        return null;
+    }
+
+    public async Task<CourseProgressDto?> GetCourseProgressAsync(string courseSlug)
+    {
+        await SetAuthHeaderAsync();
+        var response = await _http.GetAsync($"api/cms/user/courses/{courseSlug}/progress");
+        if (response.IsSuccessStatusCode)
+            return await response.Content.ReadFromJsonAsync<CourseProgressDto>();
+        return null;
+    }
+
     // ===== FEED =====
 
     public async Task<List<FeedItemDto>> GetFeedAsync(int page = 1, int pageSize = 20)

@@ -205,6 +205,97 @@ public class UserCMSController : ControllerBase
         return Ok();
     }
 
+    // ===== CONTENT READ =====
+
+    /// <summary>
+    /// Toggle content read status (mark as read / unread).
+    /// </summary>
+    [HttpPost("contents/{contentId:guid}/toggle-read")]
+    public async Task<ActionResult<ContentReadStatusDto>> ToggleContentRead(Guid contentId)
+    {
+        var userId = GetUserId();
+
+        var existing = await _db.ContentReads
+            .FirstOrDefaultAsync(cr => cr.UserId == userId && cr.ContentId == contentId);
+
+        if (existing != null)
+        {
+            _db.ContentReads.Remove(existing);
+            await _db.SaveChangesAsync();
+            return Ok(new ContentReadStatusDto(contentId, false, null));
+        }
+
+        var contentRead = new ContentRead
+        {
+            UserId = userId,
+            ContentId = contentId,
+            ReadAt = DateTime.UtcNow
+        };
+        _db.ContentReads.Add(contentRead);
+        await _db.SaveChangesAsync();
+        return Ok(new ContentReadStatusDto(contentId, true, contentRead.ReadAt));
+    }
+
+    /// <summary>
+    /// Check if a content is read by the current user.
+    /// </summary>
+    [HttpGet("contents/{contentId:guid}/read-status")]
+    public async Task<ActionResult<ContentReadStatusDto>> GetContentReadStatus(Guid contentId)
+    {
+        var userId = GetUserId();
+        var existing = await _db.ContentReads
+            .FirstOrDefaultAsync(cr => cr.UserId == userId && cr.ContentId == contentId);
+
+        return Ok(new ContentReadStatusDto(contentId, existing != null, existing?.ReadAt));
+    }
+
+    /// <summary>
+    /// Get course progress with chapters and read status per content.
+    /// </summary>
+    [HttpGet("courses/{courseSlug}/progress")]
+    public async Task<ActionResult<CourseProgressDto>> GetCourseProgress(string courseSlug)
+    {
+        var userId = GetUserId();
+
+        var course = await _db.Courses
+            .Include(c => c.Chapters.OrderBy(ch => ch.SortOrder))
+                .ThenInclude(ch => ch.Contents.Where(ct => ct.IsPublished).OrderBy(ct => ct.SortOrder))
+            .FirstOrDefaultAsync(c => c.Slug == courseSlug && c.IsPublished && c.IsActive);
+
+        if (course == null)
+            return NotFound();
+
+        var allContentIds = course.Chapters
+            .SelectMany(ch => ch.Contents)
+            .Select(c => c.Id)
+            .ToList();
+
+        var readContentIds = await _db.ContentReads
+            .Where(cr => cr.UserId == userId && allContentIds.Contains(cr.ContentId))
+            .Select(cr => cr.ContentId)
+            .ToHashSetAsync();
+
+        var chapters = course.Chapters.Select(ch =>
+        {
+            var contents = ch.Contents.Select(c => new ContentProgressDto(
+                c.Id, c.Title, c.Description, c.MainPicture, c.Slug,
+                readContentIds.Contains(c.Id)
+            )).ToList();
+
+            var total = contents.Count;
+            var read = contents.Count(c => c.IsRead);
+
+            return new ChapterProgressDto(
+                ch.Id, ch.Title, ch.Description, ch.SortOrder,
+                total, read,
+                total > 0 ? Math.Round((double)read / total * 100, 1) : 0,
+                contents
+            );
+        }).ToList();
+
+        return Ok(new CourseProgressDto(course.Id, chapters));
+    }
+
     // ===== FEED =====
 
     /// <summary>

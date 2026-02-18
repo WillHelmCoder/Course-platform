@@ -120,6 +120,22 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+
+    // Ensure ContentReads table exists (for existing databases)
+    db.Database.ExecuteSqlRaw(@"
+        CREATE TABLE IF NOT EXISTS ""ContentReads"" (
+            ""Id"" TEXT NOT NULL CONSTRAINT ""PK_ContentReads"" PRIMARY KEY,
+            ""UserId"" TEXT NOT NULL,
+            ""ContentId"" TEXT NOT NULL,
+            ""ReadAt"" TEXT NOT NULL,
+            ""CreatedAt"" TEXT NOT NULL,
+            ""UpdatedAt"" TEXT NULL,
+            CONSTRAINT ""FK_ContentReads_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE,
+            CONSTRAINT ""FK_ContentReads_Contents_ContentId"" FOREIGN KEY (""ContentId"") REFERENCES ""Contents"" (""Id"") ON DELETE CASCADE
+        );
+    ");
+    db.Database.ExecuteSqlRaw(@"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ContentReads_UserId_ContentId"" ON ""ContentReads"" (""UserId"", ""ContentId"");");
+    db.Database.ExecuteSqlRaw(@"CREATE INDEX IF NOT EXISTS ""IX_ContentReads_ContentId"" ON ""ContentReads"" (""ContentId"");");
 }
 await AppSeeder.SeedAsync(app.Services);
 // XipeLib:Seed
@@ -132,7 +148,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseCors("AllowBlazor");
 app.UseAuthentication();

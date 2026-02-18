@@ -4,6 +4,7 @@
 @using Pow.Web.Services
 @inject ApiService Api
 @inject NavigationManager Navigation
+@inject AuthStateProvider AuthState
 
 <PageTitle>@(content?.Title ?? "Loading...")</PageTitle>
 
@@ -200,6 +201,25 @@ else
         @* Share Buttons *@
         <Pow.Web.Components.ShareButtons Title="@content.Title" Description="@content.Description" />
 
+        @* Read Status Button *@
+        @if (isAuthenticated)
+        {
+            <div class="d-flex justify-center my-4">
+                <MudButton Variant="@(isRead ? Variant.Filled : Variant.Outlined)"
+                           Color="@(isRead ? Color.Success : Color.Default)"
+                           StartIcon="@(isRead ? Icons.Material.Filled.CheckCircle : Icons.Material.Outlined.CheckCircle)"
+                           OnClick="ToggleRead"
+                           Disabled="togglingRead"
+                           Size="Size.Large">
+                    @if (togglingRead)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    @(isRead ? "Leído ✓" : "Marcar como leído")
+                </MudButton>
+            </div>
+        }
+
         @* Navigation *@
         <div class="d-flex justify-space-between mt-6">
             @if (content.Previous != null)
@@ -239,6 +259,9 @@ else
     private string? codeError;
     private bool validatingCode;
     private List<BreadcrumbItem> breadcrumbs = new();
+    private bool isAuthenticated;
+    private bool isRead;
+    private bool togglingRead;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -246,6 +269,10 @@ else
         codeValidated = false;
         accessCode = "";
         codeError = null;
+        isRead = false;
+
+        var authState = await AuthState.GetAuthenticationStateAsync();
+        isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
 
         content = await Api.GetContentForReaderAsync(Slug);
 
@@ -258,10 +285,26 @@ else
                 await Api.TrackContentViewAsync(content.Id);
             }
 
+            if (isAuthenticated)
+            {
+                var status = await Api.GetContentReadStatusAsync(content.Id);
+                isRead = status?.IsRead ?? false;
+            }
+
             BuildBreadcrumbs();
         }
 
         loading = false;
+    }
+
+    private async Task ToggleRead()
+    {
+        if (content == null) return;
+        togglingRead = true;
+        var result = await Api.ToggleContentReadAsync(content.Id);
+        if (result != null)
+            isRead = result.IsRead;
+        togglingRead = false;
     }
 
     private void BuildBreadcrumbs()

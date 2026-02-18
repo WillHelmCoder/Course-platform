@@ -750,7 +750,7 @@
             if (created != null)
             {
                 Snackbar.Add("Content created successfully", Severity.Success);
-                Navigation.NavigateTo($"/creator/contents/{created.Id}");
+                Navigation.NavigateTo($"/creator/chapters/{ChapterId}/contents");
             }
             else
             {

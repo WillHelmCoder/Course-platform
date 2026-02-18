@@ -131,8 +131,83 @@ else
 
         <MudDivider Class="mb-6" />
 
-        @* Content List *@
-        @if (contents.Any())
+        @* Course Content by Chapter *@
+        @if (courseProgress != null && courseProgress.Chapters.Any())
+        {
+            <MudText Typo="Typo.h5" Class="mb-4">Course Content</MudText>
+
+            @foreach (var chapter in courseProgress.Chapters)
+            {
+                <MudPaper Class="mb-4 rounded-lg overflow-hidden" Elevation="1">
+                    <div class="pa-4">
+                        <div class="d-flex align-center justify-space-between mb-2">
+                            <MudText Typo="Typo.h6">@chapter.Title</MudText>
+                            @if (isAuthenticated)
+                            {
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(chapter.ProgressPercent >= 100 ? Color.Success : Color.Default)"
+                                         Variant="Variant.Outlined">
+                                    @chapter.ReadContents / @chapter.TotalContents
+                                </MudChip>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(chapter.Description))
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">@chapter.Description</MudText>
+                        }
+                        @if (isAuthenticated && chapter.TotalContents > 0)
+                        {
+                            <MudProgressLinear Value="@chapter.ProgressPercent" Color="@(chapter.ProgressPercent >= 100 ? Color.Success : Color.Primary)"
+                                               Rounded="true" Size="Size.Medium" Class="mb-3">
+                                <b>@chapter.ProgressPercent.ToString("0")%</b>
+                            </MudProgressLinear>
+                        }
+                    </div>
+
+                    <MudList T="ContentProgressDto" Dense="false" Class="py-0">
+                        @foreach (var content in chapter.Contents)
+                        {
+                            <MudListItem T="ContentProgressDto" Class="pa-0" Style="border-top: 1px solid var(--mud-palette-lines-default);">
+                                <div class="pa-3 d-flex align-center gap-3" style="cursor: pointer;"
+                                     @onclick="() => NavigateToContent(content.Slug)">
+                                    @if (isAuthenticated)
+                                    {
+                                        <MudIcon Icon="@(content.IsRead ? Icons.Material.Filled.CheckCircle : Icons.Material.Outlined.RadioButtonUnchecked)"
+                                                 Color="@(content.IsRead ? Color.Success : Color.Default)"
+                                                 Size="Size.Medium" />
+                                    }
+                                    @if (!string.IsNullOrEmpty(content.MainPicture))
+                                    {
+                                        <MudImage Src="@content.MainPicture" Alt="@content.Title"
+                                                  Style="width: 80px; height: 50px; object-fit: cover; border-radius: 4px;" />
+                                    }
+                                    else
+                                    {
+                                        <div style="width: 80px; height: 50px; background: var(--mud-palette-background-grey); border-radius: 4px; display: flex; align-items: center; justify-content: center;">
+                                            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="mud-text-secondary" />
+                                        </div>
+                                    }
+                                    <div class="flex-grow-1">
+                                        <MudText Typo="Typo.subtitle2" Style="@(content.IsRead ? "font-weight: 600;" : "")">
+                                            @content.Title
+                                        </MudText>
+                                        @if (!string.IsNullOrEmpty(content.Description))
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary"
+                                                     Style="display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">
+                                                @content.Description
+                                            </MudText>
+                                        }
+                                    </div>
+                                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Class="mud-text-secondary" />
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudPaper>
+            }
+        }
+        else if (contents.Any())
         {
             <MudText Typo="Typo.h5" Class="mb-4">Course Content</MudText>
             <MudList T="ContentListDto" Dense="false">
@@ -161,12 +236,6 @@ else
                                             @content.Description
                                         </MudText>
                                     }
-                                    @if (content.PublishedAt.HasValue)
-                                    {
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary mt-1">
-                                            @content.PublishedAt.Value.ToString("MMM dd, yyyy")
-                                        </MudText>
-                                    }
                                 </div>
                                 <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Class="mud-text-secondary" />
                             </div>
@@ -190,6 +259,7 @@ else
 
     private CourseDto? course;
     private List<ContentListDto> contents = new();
+    private CourseProgressDto? courseProgress;
     private bool loading = true;
     private bool hasPurchased = false;
     private bool purchasing = false;
@@ -199,6 +269,7 @@ else
     {
         loading = true;
         hasPurchased = false;
+        courseProgress = null;
 
         var authState = await AuthState.GetAuthenticationStateAsync();
         isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
@@ -209,10 +280,14 @@ else
         {
             contents = await Api.GetContentsByCourseAsync(Slug);
 
-            // Check if user has purchased this course (only if it has a price)
-            if (isAuthenticated && course.Price > 0)
+            if (isAuthenticated)
             {
-                hasPurchased = await Api.HasPurchasedCourseAsync(course.Id);
+                courseProgress = await Api.GetCourseProgressAsync(Slug);
+
+                if (course.Price > 0)
+                {
+                    hasPurchased = await Api.HasPurchasedCourseAsync(course.Id);
+                }
             }
         }
 
